@@ -267,6 +267,7 @@ function GearLister:UpdateHistoryPanel()
         emptyText:SetText("No history available")
         emptyText:SetTextColor(0.6, 0.6, 0.6)
         table.insert(frame.historyEntries, emptyText)
+        yOffset = yOffset - 30
     else
         for i, historyEntry in ipairs(gearHistory) do
             local entryButton = CreateFrame("Button", "GearListerHistoryEntry" .. i, frame.historyPanel, "GameMenuButtonTemplate")
@@ -310,10 +311,25 @@ function GearLister:UpdateHistoryPanel()
             table.insert(frame.historyEntries, entryButton)
             yOffset = yOffset - 45
         end
-        
-        -- Update scroll height
-        frame.historyPanel:SetHeight(math.max(400, math.abs(yOffset) + 50))
     end
+    
+    -- Add Clear History button at the bottom of the history panel
+    local clearHistoryButton = CreateFrame("Button", "GearListerClearHistoryButton", frame.historyPanel, "GameMenuButtonTemplate")
+    clearHistoryButton:SetSize(160, 25)
+    clearHistoryButton:SetPoint("TOP", frame.historyPanel, "TOP", 0, yOffset - 20)
+    clearHistoryButton:SetText("Clear History")
+    clearHistoryButton:SetScript("OnClick", function()
+        gearHistory = {}
+        currentHistoryIndex = nil
+        GearLister:UpdateHistoryPanel()
+        GearLister:UpdateGearList()
+        print("|cff00ff00GearLister:|r History cleared.")
+    end)
+    
+    table.insert(frame.historyEntries, clearHistoryButton)
+    
+    -- Update scroll height to accommodate the new button
+    frame.historyPanel:SetHeight(math.max(400, math.abs(yOffset - 50) + 50))
 end
 
 -- Function to create settings dialog
@@ -543,26 +559,13 @@ function GearLister:CreateGearDialog()
         ClearInspectPlayer()
     end)
     
-    -- Create settings button
+    -- Create settings button - moved to avoid overlap
     local settingsButton = CreateFrame("Button", "GearListerSettingsButton", frame, "GameMenuButtonTemplate")
     settingsButton:SetSize(70, 25)
-    settingsButton:SetPoint("BOTTOM", frame, "BOTTOM", -60, 40)
+    settingsButton:SetPoint("BOTTOM", frame, "BOTTOM", 0, 40)
     settingsButton:SetText("Settings")
     settingsButton:SetScript("OnClick", function()
         GearLister:CreateSettingsDialog()
-    end)
-    
-    -- Create clear history button
-    local clearHistoryButton = CreateFrame("Button", "GearListerClearHistoryButton", frame, "GameMenuButtonTemplate")
-    clearHistoryButton:SetSize(100, 25)
-    clearHistoryButton:SetPoint("BOTTOM", frame, "BOTTOM", 0, 40)
-    clearHistoryButton:SetText("Clear History")
-    clearHistoryButton:SetScript("OnClick", function()
-        gearHistory = {}
-        currentHistoryIndex = nil
-        GearLister:UpdateHistoryPanel()
-        GearLister:UpdateGearList()
-        print("|cff00ff00GearLister:|r History cleared.")
     end)
     
     -- Create save button (saves current gear to history)
