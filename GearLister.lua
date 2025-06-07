@@ -1,12 +1,12 @@
 -- GearLister Addon for WoW Classic
--- Shows equipped gear in a copyable dialog
+-- Shows equipped gear in a copyable dialog with integrated history panel
 
 local GearLister = {}
 local frame = nil
 local settingsFrame = nil
-local historyFrame = nil
 local inspectMode = false
 local inspectTarget = nil
+local currentHistoryIndex = nil -- Track which history entry is selected
 
 -- Default settings
 local settings = {
@@ -122,6 +122,7 @@ function GearLister:SaveToHistory(characterName, items)
             entry.displayTime = date("%m/%d %H:%M")
             table.remove(gearHistory, i)
             table.insert(gearHistory, 1, entry)
+            GearLister:UpdateHistoryPanel()
             return
         end
     end
@@ -140,6 +141,9 @@ function GearLister:SaveToHistory(characterName, items)
     while #gearHistory > 50 do
         table.remove(gearHistory)
     end
+    
+    -- Update history panel if frame exists
+    GearLister:UpdateHistoryPanel()
 end
 
 -- Function to start inspect mode
@@ -194,199 +198,129 @@ function GearLister:UpdateExampleText()
     end
 end
 
--- Function to create history dialog
-function GearLister:CreateHistoryDialog()
-    if historyFrame then
-        historyFrame:Show()
-        historyFrame:Raise()
-        GearLister:UpdateHistoryList()
-        return
+-- Function to select a history entry
+function GearLister:SelectHistoryEntry(index)
+    currentHistoryIndex = index
+    
+    -- Update button states
+    GearLister:UpdateHistoryPanel()
+    
+    -- Update gear display
+    if index and gearHistory[index] then
+        local historyEntry = gearHistory[index]
+        local gearText = table.concat(historyEntry.items, "\n")
+        frame.editBox:SetText(gearText)
+        frame.editBox:HighlightText()
+        frame.editBox:SetCursorPosition(0)
+        
+        -- Update title
+        frame.titleText:SetText("Gear History - " .. historyEntry.characterName .. " (" .. historyEntry.displayTime .. ")")
+    else
+        -- Show current gear
+        GearLister:UpdateGearList()
     end
-    
-    -- Create history frame (keep full opacity)
-    historyFrame = CreateFrame("Frame", "GearListerHistoryFrame", UIParent, "BasicFrameTemplateWithInset")
-    historyFrame:SetSize(600, 500)
-    historyFrame:SetPoint("CENTER", 30, 0) -- Offset from center to avoid overlap
-    historyFrame:SetMovable(true)
-    historyFrame:EnableMouse(true)
-    historyFrame:RegisterForDrag("LeftButton")
-    historyFrame:SetScript("OnDragStart", historyFrame.StartMoving)
-    historyFrame:SetScript("OnDragStop", historyFrame.StopMovingOrSizing)
-    historyFrame:SetFrameStrata("DIALOG")
-    historyFrame:SetFrameLevel(90)
-    
-    -- Set title
-    historyFrame.title = historyFrame:CreateFontString(nil, "OVERLAY")
-    historyFrame.title:SetFontObject("GameFontHighlight")
-    historyFrame.title:SetPoint("LEFT", historyFrame.TitleBg, "LEFT", 5, 0)
-    historyFrame.title:SetText("Gear History")
-    
-    -- Create scroll frame for the history list
-    local scrollFrame = CreateFrame("ScrollFrame", "GearListerHistoryScrollFrame", historyFrame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", historyFrame, "TOPLEFT", 10, -30)
-    scrollFrame:SetPoint("BOTTOMRIGHT", historyFrame, "BOTTOMRIGHT", -30, 70)
-    
-    -- Create content frame for history entries
-    local contentFrame = CreateFrame("Frame", "GearListerHistoryContent", scrollFrame)
-    contentFrame:SetSize(550, 400)
-    scrollFrame:SetScrollChild(contentFrame)
-    
-    -- Create close button
-    local closeButton = CreateFrame("Button", "GearListerHistoryCloseButton", historyFrame, "GameMenuButtonTemplate")
-    closeButton:SetSize(80, 25)
-    closeButton:SetPoint("BOTTOMRIGHT", historyFrame, "BOTTOMRIGHT", -10, 10)
-    closeButton:SetText("Close")
-    closeButton:SetScript("OnClick", function()
-        historyFrame:Hide()
-    end)
-    
-    -- Create clear history button
-    local clearButton = CreateFrame("Button", "GearListerHistoryClearButton", historyFrame, "GameMenuButtonTemplate")
-    clearButton:SetSize(100, 25)
-    clearButton:SetPoint("BOTTOMLEFT", historyFrame, "BOTTOMLEFT", 10, 10)
-    clearButton:SetText("Clear History")
-    clearButton:SetScript("OnClick", function()
-        gearHistory = {}
-        GearLister:UpdateHistoryList()
-        print("|cff00ff00GearLister:|r History cleared.")
-    end)
-    
-    -- Create refresh button
-    local refreshButton = CreateFrame("Button", "GearListerHistoryRefreshButton", historyFrame, "GameMenuButtonTemplate")
-    refreshButton:SetSize(80, 25)
-    refreshButton:SetPoint("BOTTOM", historyFrame, "BOTTOM", 0, 10)
-    refreshButton:SetText("Refresh")
-    refreshButton:SetScript("OnClick", function()
-        GearLister:UpdateHistoryList()
-    end)
-    
-    -- Store references
-    historyFrame.contentFrame = contentFrame
-    historyFrame.scrollFrame = scrollFrame
-    historyFrame.entries = {}
-    
-    -- Initial population
-    GearLister:UpdateHistoryList()
-    
-    -- Ensure dialog stays on top when shown
-    historyFrame:SetScript("OnShow", function(self)
-        self:Raise()
-    end)
 end
 
--- Function to update history list display
-function GearLister:UpdateHistoryList()
-    if not historyFrame or not historyFrame.contentFrame then
+-- Function to update history panel
+function GearLister:UpdateHistoryPanel()
+    if not frame or not frame.historyPanel then
         return
     end
     
     -- Clear existing entries
-    for _, entry in pairs(historyFrame.entries) do
-        entry:Hide()
+    if frame.historyEntries then
+        for _, entry in pairs(frame.historyEntries) do
+            entry:Hide()
+        end
     end
-    historyFrame.entries = {}
+    frame.historyEntries = {}
     
-    local yOffset = 0
+    local yOffset = -5
     
+    -- "Current Gear" button
+    local currentButton = CreateFrame("Button", "GearListerCurrentButton", frame.historyPanel, "GameMenuButtonTemplate")
+    currentButton:SetSize(180, 25)
+    currentButton:SetPoint("TOP", frame.historyPanel, "TOP", 0, yOffset)
+    currentButton:SetText("Current Gear")
+    
+    -- Highlight if current gear is selected
+    if not currentHistoryIndex then
+        currentButton:SetNormalTexture("Interface\\Buttons\\UI-Panel-Button-Highlight")
+        currentButton:GetNormalTexture():SetVertexColor(0.2, 0.6, 1.0, 0.3)
+    end
+    
+    currentButton:SetScript("OnClick", function()
+        inspectMode = false
+        inspectTarget = nil
+        currentHistoryIndex = nil
+        ClearInspectPlayer()
+        GearLister:SelectHistoryEntry(nil)
+    end)
+    
+    table.insert(frame.historyEntries, currentButton)
+    yOffset = yOffset - 30
+    
+    -- History entries
     if #gearHistory == 0 then
-        -- Show empty message
-        local emptyText = historyFrame.contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        emptyText:SetPoint("TOP", historyFrame.contentFrame, "TOP", 0, -20)
-        emptyText:SetText("No gear history available.")
-        emptyText:SetTextColor(0.7, 0.7, 0.7)
-        table.insert(historyFrame.entries, emptyText)
-        return
-    end
-    
-    -- Create history entries
-    for i, historyEntry in ipairs(gearHistory) do
-        -- Create entry frame
-        local entryFrame = CreateFrame("Frame", "GearListerHistoryEntry" .. i, historyFrame.contentFrame)
-        entryFrame:SetSize(540, 80)
-        entryFrame:SetPoint("TOP", historyFrame.contentFrame, "TOP", 0, yOffset)
-        
-        -- Create background for entry
-        local bg = entryFrame:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        bg:SetColorTexture(0.1, 0.1, 0.1, 0.3)
-        
-        -- Character name and timestamp
-        local headerText = entryFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        headerText:SetPoint("TOPLEFT", entryFrame, "TOPLEFT", 10, -5)
-        headerText:SetText(historyEntry.characterName .. " - " .. historyEntry.displayTime)
-        
-        -- Gear summary (first few items)
-        local summaryItems = {}
-        for j = 1, math.min(3, #historyEntry.items) do
-            local item = historyEntry.items[j]
-            local itemName = string.match(item, ": (.+)" .. string.gsub(GearLister:GetActualDelimiter(), "([^%w])", "%%%1"))
-            if itemName then
-                table.insert(summaryItems, itemName)
+        local emptyText = frame.historyPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        emptyText:SetPoint("TOP", frame.historyPanel, "TOP", 0, yOffset)
+        emptyText:SetText("No history available")
+        emptyText:SetTextColor(0.6, 0.6, 0.6)
+        table.insert(frame.historyEntries, emptyText)
+    else
+        for i, historyEntry in ipairs(gearHistory) do
+            local entryButton = CreateFrame("Button", "GearListerHistoryEntry" .. i, frame.historyPanel, "GameMenuButtonTemplate")
+            entryButton:SetSize(180, 40)
+            entryButton:SetPoint("TOP", frame.historyPanel, "TOP", 0, yOffset)
+            
+            -- Highlight if this entry is selected
+            if currentHistoryIndex == i then
+                entryButton:SetNormalTexture("Interface\\Buttons\\UI-Panel-Button-Highlight")
+                entryButton:GetNormalTexture():SetVertexColor(0.2, 0.6, 1.0, 0.3)
             end
+            
+            -- Button text (character name and time)
+            local buttonText = historyEntry.characterName .. "\n" .. historyEntry.displayTime
+            entryButton:SetText(buttonText)
+            entryButton:GetFontString():SetJustifyH("CENTER")
+            
+            entryButton:SetScript("OnClick", function()
+                GearLister:SelectHistoryEntry(i)
+            end)
+            
+            -- Delete button (small X in corner)
+            local deleteButton = CreateFrame("Button", "GearListerHistoryDelete" .. i, entryButton)
+            deleteButton:SetSize(16, 16)
+            deleteButton:SetPoint("TOPRIGHT", entryButton, "TOPRIGHT", -2, -2)
+            deleteButton:SetNormalTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Up")
+            deleteButton:SetHighlightTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight")
+            deleteButton:SetPushedTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Down")
+            deleteButton:SetScript("OnClick", function()
+                table.remove(gearHistory, i)
+                -- Reset selection if we deleted the selected entry
+                if currentHistoryIndex == i then
+                    currentHistoryIndex = nil
+                    GearLister:SelectHistoryEntry(nil)
+                elseif currentHistoryIndex and currentHistoryIndex > i then
+                    currentHistoryIndex = currentHistoryIndex - 1
+                end
+                GearLister:UpdateHistoryPanel()
+            end)
+            
+            table.insert(frame.historyEntries, entryButton)
+            yOffset = yOffset - 45
         end
-        if #historyEntry.items > 3 then
-            table.insert(summaryItems, "... (" .. (#historyEntry.items - 3) .. " more)")
-        end
         
-        local summaryText = entryFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        summaryText:SetPoint("TOPLEFT", headerText, "BOTTOMLEFT", 0, -5)
-        summaryText:SetPoint("TOPRIGHT", entryFrame, "TOPRIGHT", -100, -25)
-        summaryText:SetJustifyH("LEFT")
-        summaryText:SetWordWrap(true)
-        summaryText:SetText(table.concat(summaryItems, ", "))
-        summaryText:SetTextColor(0.8, 0.8, 0.8)
-        
-        -- View button
-        local viewButton = CreateFrame("Button", "GearListerHistoryViewButton" .. i, entryFrame, "GameMenuButtonTemplate")
-        viewButton:SetSize(60, 20)
-        viewButton:SetPoint("TOPRIGHT", entryFrame, "TOPRIGHT", -10, -5)
-        viewButton:SetText("View")
-        viewButton:SetScript("OnClick", function()
-            GearLister:ShowHistoryEntry(historyEntry)
-        end)
-        
-        -- Delete button
-        local deleteButton = CreateFrame("Button", "GearListerHistoryDeleteButton" .. i, entryFrame, "GameMenuButtonTemplate")
-        deleteButton:SetSize(60, 20)
-        deleteButton:SetPoint("TOPRIGHT", viewButton, "BOTTOMRIGHT", 0, -5)
-        deleteButton:SetText("Delete")
-        deleteButton:SetScript("OnClick", function()
-            table.remove(gearHistory, i)
-            GearLister:UpdateHistoryList()
-        end)
-        
-        table.insert(historyFrame.entries, entryFrame)
-        yOffset = yOffset - 90
+        -- Update scroll height
+        frame.historyPanel:SetHeight(math.max(400, math.abs(yOffset) + 50))
     end
-    
-    -- Update content frame height
-    historyFrame.contentFrame:SetHeight(math.max(400, math.abs(yOffset)))
-end
-
--- Function to show a specific history entry in the main dialog
-function GearLister:ShowHistoryEntry(historyEntry)
-    -- Create or show main dialog
-    if not frame then
-        GearLister:CreateGearDialog()
-    end
-    
-    frame:Show()
-    
-    -- Update title to show it's a historical entry
-    frame.titleText:SetText("Gear History - " .. historyEntry.characterName .. " (" .. historyEntry.displayTime .. ")")
-    
-    -- Display the historical gear
-    local gearText = table.concat(historyEntry.items, "\n")
-    frame.editBox:SetText(gearText)
-    frame.editBox:HighlightText()
-    frame.editBox:SetCursorPosition(0)
 end
 
 -- Function to create settings dialog
 function GearLister:CreateSettingsDialog()
     if settingsFrame then
         settingsFrame:Show()
-        settingsFrame:Raise() -- Bring to front
+        settingsFrame:Raise()
         return
     end
     
@@ -399,8 +333,8 @@ function GearLister:CreateSettingsDialog()
     settingsFrame:RegisterForDrag("LeftButton")
     settingsFrame:SetScript("OnDragStart", settingsFrame.StartMoving)
     settingsFrame:SetScript("OnDragStop", settingsFrame.StopMovingOrSizing)
-    settingsFrame:SetFrameStrata("DIALOG") -- Ensure it's on top
-    settingsFrame:SetFrameLevel(100) -- High frame level
+    settingsFrame:SetFrameStrata("DIALOG")
+    settingsFrame:SetFrameLevel(100)
     
     -- Set title
     settingsFrame.title = settingsFrame:CreateFontString(nil, "OVERLAY")
@@ -435,7 +369,7 @@ function GearLister:CreateSettingsDialog()
     -- Example text (with wrapping)
     local exampleLabel = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     exampleLabel:SetPoint("TOPLEFT", newlineCheckbox, "BOTTOMLEFT", 0, -15)
-    exampleLabel:SetPoint("TOPRIGHT", settingsFrame, "TOPRIGHT", -20, -155) -- Adjusted for new checkbox
+    exampleLabel:SetPoint("TOPRIGHT", settingsFrame, "TOPRIGHT", -20, -155)
     exampleLabel:SetJustifyH("LEFT")
     exampleLabel:SetWordWrap(true)
     exampleLabel:SetTextColor(0.7, 0.7, 0.7)
@@ -452,7 +386,7 @@ function GearLister:CreateSettingsDialog()
     
     -- Also update on character input for immediate feedback
     delimiterInput:SetScript("OnChar", function(self)
-        C_Timer.After(0.01, function() -- Tiny delay to ensure text is updated
+        C_Timer.After(0.01, function()
             GearLister:UpdateExampleText()
         end)
     end)
@@ -470,7 +404,11 @@ function GearLister:CreateSettingsDialog()
         settingsFrame:Hide()
         -- Update current display if frame is open
         if frame and frame:IsShown() then
-            GearLister:UpdateGearList()
+            if currentHistoryIndex then
+                GearLister:SelectHistoryEntry(currentHistoryIndex)
+            else
+                GearLister:UpdateGearList()
+            end
         end
     end)
     
@@ -515,12 +453,13 @@ function GearLister:CreateGearDialog()
     if frame then
         frame:Show()
         GearLister:UpdateGearList()
+        GearLister:UpdateHistoryPanel()
         return
     end
     
-    -- Create main frame with 50% opacity
+    -- Create main frame with 50% opacity - make it wider for split pane
     frame = CreateFrame("Frame", "GearListerFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(500, 600)
+    frame:SetSize(800, 600) -- Increased width for split pane
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -540,16 +479,32 @@ function GearLister:CreateGearDialog()
     -- Store title reference for updates
     frame.titleText = frame.title
     
-    -- Create scroll frame for the text
-    local scrollFrame = CreateFrame("ScrollFrame", "GearListerScrollFrame", frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -30)
-    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 70) -- Adjusted for additional button row
+    -- Create history panel (left side)
+    local historyPanel = CreateFrame("ScrollFrame", "GearListerHistoryPanel", frame, "UIPanelScrollFrameTemplate")
+    historyPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -30)
+    historyPanel:SetSize(200, 500) -- Fixed width for history panel
+    
+    -- Create content frame for history
+    local historyContent = CreateFrame("Frame", "GearListerHistoryContent", historyPanel)
+    historyContent:SetSize(180, 500)
+    historyPanel:SetScrollChild(historyContent)
+    
+    -- Create vertical separator line
+    local separator = frame:CreateTexture(nil, "OVERLAY")
+    separator:SetSize(2, 500)
+    separator:SetPoint("LEFT", historyPanel, "RIGHT", 10, 0)
+    separator:SetColorTexture(0.3, 0.3, 0.3, 0.8)
+    
+    -- Create gear list panel (right side)
+    local gearScrollFrame = CreateFrame("ScrollFrame", "GearListerScrollFrame", frame, "UIPanelScrollFrameTemplate")
+    gearScrollFrame:SetPoint("TOPLEFT", separator, "TOPRIGHT", 15, 0)
+    gearScrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 70)
     
     -- Create editbox for the gear list
-    local editBox = CreateFrame("EditBox", "GearListerEditBox", scrollFrame)
+    local editBox = CreateFrame("EditBox", "GearListerEditBox", gearScrollFrame)
     editBox:SetMultiLine(true)
     editBox:SetFontObject("ChatFontNormal")
-    editBox:SetWidth(460)
+    editBox:SetWidth(540) -- Adjusted for new layout
     editBox:SetHeight(500)
     editBox:SetAutoFocus(false)
     editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
@@ -559,7 +514,7 @@ function GearLister:CreateGearDialog()
         self:HighlightText()
     end)
     
-    scrollFrame:SetScrollChild(editBox)
+    gearScrollFrame:SetScrollChild(editBox)
     
     -- Create refresh button
     local refreshButton = CreateFrame("Button", "GearListerRefreshButton", frame, "GameMenuButtonTemplate")
@@ -567,7 +522,11 @@ function GearLister:CreateGearDialog()
     refreshButton:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 40)
     refreshButton:SetText("Refresh")
     refreshButton:SetScript("OnClick", function()
-        GearLister:UpdateGearList()
+        if currentHistoryIndex then
+            GearLister:SelectHistoryEntry(currentHistoryIndex)
+        else
+            GearLister:UpdateGearList()
+        end
     end)
     
     -- Create close button
@@ -577,28 +536,33 @@ function GearLister:CreateGearDialog()
     closeButton:SetText("Close")
     closeButton:SetScript("OnClick", function()
         frame:Hide()
-        -- Reset inspect mode when closing
+        -- Reset modes when closing
         inspectMode = false
         inspectTarget = nil
+        currentHistoryIndex = nil
         ClearInspectPlayer()
     end)
     
-    -- Create settings button - FIXED VERSION
+    -- Create settings button
     local settingsButton = CreateFrame("Button", "GearListerSettingsButton", frame, "GameMenuButtonTemplate")
     settingsButton:SetSize(70, 25)
-    settingsButton:SetPoint("BOTTOM", frame, "BOTTOM", -40, 40)
+    settingsButton:SetPoint("BOTTOM", frame, "BOTTOM", -60, 40)
     settingsButton:SetText("Settings")
     settingsButton:SetScript("OnClick", function()
         GearLister:CreateSettingsDialog()
     end)
     
-    -- Create history button
-    local historyButton = CreateFrame("Button", "GearListerHistoryButton", frame, "GameMenuButtonTemplate")
-    historyButton:SetSize(80, 25)
-    historyButton:SetPoint("BOTTOM", frame, "BOTTOM", 40, 40)
-    historyButton:SetText("History")
-    historyButton:SetScript("OnClick", function()
-        GearLister:CreateHistoryDialog()
+    -- Create clear history button
+    local clearHistoryButton = CreateFrame("Button", "GearListerClearHistoryButton", frame, "GameMenuButtonTemplate")
+    clearHistoryButton:SetSize(100, 25)
+    clearHistoryButton:SetPoint("BOTTOM", frame, "BOTTOM", 0, 40)
+    clearHistoryButton:SetText("Clear History")
+    clearHistoryButton:SetScript("OnClick", function()
+        gearHistory = {}
+        currentHistoryIndex = nil
+        GearLister:UpdateHistoryPanel()
+        GearLister:UpdateGearList()
+        print("|cff00ff00GearLister:|r History cleared.")
     end)
     
     -- Create save button (saves current gear to history)
@@ -621,10 +585,13 @@ function GearLister:CreateGearDialog()
     
     -- Store references
     frame.editBox = editBox
-    frame.scrollFrame = scrollFrame
+    frame.scrollFrame = gearScrollFrame
+    frame.historyPanel = historyContent
+    frame.historyEntries = {}
     
     -- Initial population
     GearLister:UpdateGearList()
+    GearLister:UpdateHistoryPanel()
 end
 
 -- Function to update the gear list in the dialog
@@ -654,6 +621,9 @@ function GearLister:UpdateGearList()
     -- Auto-save current gear to history when viewing
     local characterName = inspectMode and inspectTarget or UnitName("player")
     GearLister:SaveToHistory(characterName, items)
+    
+    -- Reset history selection since we're showing current
+    currentHistoryIndex = nil
 end
 
 -- Slash command to show the dialog
@@ -666,12 +636,11 @@ SlashCmdList["GEARLISTER"] = function(msg)
         if GearLister:StartInspect() then
             -- Inspect started successfully, dialog will open when ready
         end
-    elseif command == "history" then
-        GearLister:CreateHistoryDialog()
     else
         -- Reset inspect mode for normal use
         inspectMode = false
         inspectTarget = nil
+        currentHistoryIndex = nil
         ClearInspectPlayer()
         GearLister:CreateGearDialog()
     end
@@ -685,7 +654,6 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == "GearLister" then
         print("|cff00ff00GearLister|r loaded! Use /gear or /gearlist to show your equipped items with Wowhead links.")
         print("|cff00ff00GearLister:|r Use /gearlist inspect to inspect your target's gear.")
-        print("|cff00ff00GearLister:|r Use /gearlist history to view gear history.")
     elseif event == "INSPECT_READY" then
         GearLister:OnInspectReady()
     end

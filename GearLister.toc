@@ -1,7 +1,7 @@
 ## Interface: 11503
 ## Title: GearLister
 ## Notes: Shows equipped gear in a copyable dialog. Use `/gear` or `/gearlist` to invoke. Use `/gear inspect` to list your target's gear. Enjoy!
-## Version: 1.0
+## Version: 2.0
 ## Author: Bunnycrits
 
 GearLister.lua
