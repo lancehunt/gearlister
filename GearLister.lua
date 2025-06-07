@@ -206,7 +206,7 @@ function GearLister:CreateHistoryDialog()
     -- Create history frame (keep full opacity)
     historyFrame = CreateFrame("Frame", "GearListerHistoryFrame", UIParent, "BasicFrameTemplateWithInset")
     historyFrame:SetSize(600, 500)
-    historyFrame:SetPoint("CENTER", 50, 0) -- Offset from center to avoid overlap
+    historyFrame:SetPoint("CENTER", 30, 0) -- Offset from center to avoid overlap
     historyFrame:SetMovable(true)
     historyFrame:EnableMouse(true)
     historyFrame:RegisterForDrag("LeftButton")
@@ -583,11 +583,11 @@ function GearLister:CreateGearDialog()
         ClearInspectPlayer()
     end)
     
-    -- Create settings button (gear icon)
+    -- Create settings button - FIXED VERSION
     local settingsButton = CreateFrame("Button", "GearListerSettingsButton", frame, "GameMenuButtonTemplate")
-    settingsButton:SetSize(25, 25)
+    settingsButton:SetSize(70, 25)
     settingsButton:SetPoint("BOTTOM", frame, "BOTTOM", -40, 40)
-    settingsButton:SetText("⚙")
+    settingsButton:SetText("Settings")
     settingsButton:SetScript("OnClick", function()
         GearLister:CreateSettingsDialog()
     end)
