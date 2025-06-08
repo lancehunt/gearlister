@@ -166,6 +166,7 @@ function GearLister:SaveToHistory(characterName, items)
             table.remove(gearHistory, i)
             table.insert(gearHistory, 1, entry)
             self:RefreshHistoryList()
+            self:Print("|cffff9900Duplicate gear set found for " .. characterName .. " - updated timestamp|r")
             return
         end
     end
@@ -353,8 +354,8 @@ function GearLister:ShowMainWindow()
 
     -- Control buttons - positioned manually
     local refreshButton = AceGUI:Create("Button")
-    refreshButton:SetText("Refresh & Save")
-    refreshButton:SetWidth(120)
+    refreshButton:SetText("Inspect")
+    refreshButton:SetWidth(80)
     refreshButton:SetCallback("OnClick", function()
         self:RefreshCurrentGear()
     end)
@@ -547,10 +548,10 @@ function GearLister:RefreshCurrentGear()
                 local items = self:GetEquippedItems("player")
                 self:SaveToHistory(characterName, items)
                 self:RefreshMainWindow()
-                self:Print("|cff00ff00Refreshed and saved gear for " .. characterName .. "|r")
+                self:Print("|cff00ff00Inspected and saved gear for " .. characterName .. "|r")
             else
                 -- Inspect mode started, will update and save when ready
-                self:Print("|cff00ff00Refreshing target gear...|r")
+                self:Print("|cff00ff00Inspecting target gear...|r")
             end
         end
     end
