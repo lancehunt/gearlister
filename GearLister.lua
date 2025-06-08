@@ -6,6 +6,11 @@ local AceAddon = LibStub("AceAddon-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
 local AceDB = LibStub("AceDB-3.0")
 
+-- Prevent duplicate addon creation
+if AceAddon:GetAddon("GearLister", true) then
+    return
+end
+
 local GearLister = AceAddon:NewAddon("GearLister", "AceConsole-3.0", "AceEvent-3.0")
 
 -- Default database structure
@@ -252,6 +257,7 @@ function GearLister:DetermineTargetMode()
             return true
         end
     else
+        -- No target, default to player
         inspectMode = false
         inspectTarget = nil
         return true
@@ -271,7 +277,7 @@ function GearLister:ShowMainWindow()
     mainFrame:SetTitle("GearLister - Equipped Gear with Wowhead Links")
     mainFrame:SetWidth(900)
     mainFrame:SetHeight(650)
-    mainFrame:SetLayout("Flow")
+    mainFrame:SetLayout("Fill")
     mainFrame:SetCallback("OnClose", function(widget)
         inspectMode = false
         inspectTarget = nil
@@ -280,32 +286,27 @@ function GearLister:ShowMainWindow()
         widget:Hide()
     end)
 
-    -- Create horizontal group for split layout
-    local horizontalGroup = AceGUI:Create("SimpleGroup")
-    horizontalGroup:SetFullWidth(true)
-    horizontalGroup:SetFullHeight(true)
-    horizontalGroup:SetLayout("Flow")
-    mainFrame:AddChild(horizontalGroup)
-
-    -- Left panel - History list
-    local leftGroup = AceGUI:Create("SimpleGroup")
-    leftGroup:SetWidth(250)
-    leftGroup:SetFullHeight(true)
-    leftGroup:SetLayout("Fill")
-    horizontalGroup:AddChild(leftGroup)
+    -- Create main container with manual positioning
+    local container = AceGUI:Create("SimpleGroup")
+    container:SetFullWidth(true)
+    container:SetFullHeight(true)
+    container:SetLayout(nil) -- No automatic layout
+    mainFrame:AddChild(container)
 
     -- History list label
     local historyLabel = AceGUI:Create("Label")
     historyLabel:SetText("Gear History:")
-    historyLabel:SetFullWidth(true)
-    leftGroup:AddChild(historyLabel)
+    historyLabel:SetWidth(200)
+    historyLabel.frame:SetPoint("TOPLEFT", container.frame, "TOPLEFT", 10, -10)
+    container:AddChild(historyLabel)
 
     -- History list
     local historyList = AceGUI:Create("ScrollFrame")
-    historyList:SetFullWidth(true)
-    historyList:SetFullHeight(true)
+    historyList:SetWidth(200)
+    historyList:SetHeight(500)
     historyList:SetLayout("List")
-    leftGroup:AddChild(historyList)
+    historyList.frame:SetPoint("TOPLEFT", historyLabel.frame, "BOTTOMLEFT", 0, -5)
+    container:AddChild(historyList)
 
     -- Store reference to history list
     mainFrame.historyList = historyList
@@ -319,65 +320,71 @@ function GearLister:ShowMainWindow()
     end)
     historyList:AddChild(currentButton)
 
-    -- Right panel - Gear display and controls
-    local rightGroup = AceGUI:Create("SimpleGroup")
-    rightGroup:SetWidth(630)
-    rightGroup:SetFullHeight(true)
-    rightGroup:SetLayout("Flow")
-    horizontalGroup:AddChild(rightGroup)
+    -- Clear History button (positioned below history list)
+    local clearHistoryButton = AceGUI:Create("Button")
+    clearHistoryButton:SetText("Clear History")
+    clearHistoryButton:SetWidth(200)
+    clearHistoryButton:SetCallback("OnClick", function()
+        self:ClearHistory()
+    end)
+    clearHistoryButton.frame:SetPoint("TOPLEFT", historyList.frame, "BOTTOMLEFT", 0, -10)
+    container:AddChild(clearHistoryButton)
+
+    -- Store reference for later updates
+    mainFrame.clearHistoryButton = clearHistoryButton
+
+    -- Gear display label
+    local gearLabel = AceGUI:Create("Label")
+    gearLabel:SetText("Equipped Gear:")
+    gearLabel:SetWidth(600)
+    gearLabel.frame:SetPoint("TOPLEFT", container.frame, "TOPLEFT", 230, -10)
+    container:AddChild(gearLabel)
 
     -- Gear display
     local gearEditBox = AceGUI:Create("MultiLineEditBox")
-    gearEditBox:SetFullWidth(true)
-    gearEditBox:SetNumLines(25)
-    gearEditBox:SetLabel("Equipped Gear:")
+    gearEditBox:SetWidth(600)
+    gearEditBox:SetNumLines(20)
     gearEditBox:DisableButton(true)
-    rightGroup:AddChild(gearEditBox)
+    gearEditBox.frame:SetPoint("TOPLEFT", gearLabel.frame, "BOTTOMLEFT", 0, -5)
+    container:AddChild(gearEditBox)
 
     -- Store reference to gear display
     mainFrame.gearEditBox = gearEditBox
 
-    -- Control buttons group
-    local buttonGroup = AceGUI:Create("SimpleGroup")
-    buttonGroup:SetFullWidth(true)
-    buttonGroup:SetLayout("Flow")
-    rightGroup:AddChild(buttonGroup)
-
-    -- Refresh button
+    -- Control buttons - positioned manually
     local refreshButton = AceGUI:Create("Button")
     refreshButton:SetText("Refresh")
     refreshButton:SetWidth(100)
     refreshButton:SetCallback("OnClick", function()
         self:RefreshCurrentGear()
     end)
-    buttonGroup:AddChild(refreshButton)
+    refreshButton.frame:SetPoint("BOTTOMLEFT", container.frame, "BOTTOMLEFT", 230, 10)
+    container:AddChild(refreshButton)
 
-    -- Save button
     local saveButton = AceGUI:Create("Button")
     saveButton:SetText("Save")
     saveButton:SetWidth(100)
     saveButton:SetCallback("OnClick", function()
         self:SaveCurrentGear()
     end)
-    buttonGroup:AddChild(saveButton)
+    saveButton.frame:SetPoint("LEFT", refreshButton.frame, "RIGHT", 10, 0)
+    container:AddChild(saveButton)
 
-    -- Settings button
     local settingsButton = AceGUI:Create("Button")
     settingsButton:SetText("Settings")
     settingsButton:SetWidth(100)
     settingsButton:SetCallback("OnClick", function()
         self:ShowSettingsWindow()
     end)
-    buttonGroup:AddChild(settingsButton)
+    settingsButton.frame:SetPoint("LEFT", saveButton.frame, "RIGHT", 10, 0)
+    container:AddChild(settingsButton)
 
-    -- Clear History button
-    local clearButton = AceGUI:Create("Button")
-    clearButton:SetText("Clear History")
-    clearButton:SetWidth(120)
-    clearButton:SetCallback("OnClick", function()
-        self:ClearHistory()
-    end)
-    buttonGroup:AddChild(clearButton)
+    -- Credit text
+    local creditText = AceGUI:Create("Label")
+    creditText:SetText("|cff808080Made with <3 by Bunnycrits|r")
+    creditText:SetWidth(200)
+    creditText.frame:SetPoint("BOTTOM", container.frame, "BOTTOM", 0, -5)
+    container:AddChild(creditText)
 
     -- Initialize display
     self:RefreshMainWindow()
@@ -393,48 +400,63 @@ end
 function GearLister:RefreshHistoryList()
     if not mainFrame or not mainFrame.historyList then return end
 
-    -- Clear existing history entries (keep current gear button)
-    local children = { mainFrame.historyList.children[1] } -- Keep first child (current gear button)
-    mainFrame.historyList:ReleaseChildren()
-    mainFrame.historyList:AddChild(children[1])
+    -- Clear existing history entries but keep the current gear button
+    local children = {}
+    for i, child in ipairs(mainFrame.historyList.children) do
+        if i == 1 then
+            -- Keep the Current Gear button
+            children[1] = child
+        else
+            child:Release()
+        end
+    end
+    mainFrame.historyList.children = children
 
-    -- Highlight current gear button if selected
-    if not currentHistoryIndex then
-        children[1]:SetText("|cff00ff00Current Gear|r")
-    else
-        children[1]:SetText("Current Gear")
+    -- Update current gear button highlighting
+    if children[1] then
+        if not currentHistoryIndex then
+            children[1]:SetText("|cff00ff00Current Gear|r")
+        else
+            children[1]:SetText("Current Gear")
+        end
     end
 
-    -- Add history entries
+    -- Add history entries as clickable text rows
     local gearHistory = self.db.profile.gearHistory
     for i, entry in ipairs(gearHistory) do
-        local entryGroup = AceGUI:Create("SimpleGroup")
-        entryGroup:SetFullWidth(true)
-        entryGroup:SetLayout("Flow")
+        local entryContainer = AceGUI:Create("SimpleGroup")
+        entryContainer:SetFullWidth(true)
+        entryContainer:SetLayout(nil) -- Manual positioning
+        entryContainer:SetHeight(35)
 
-        -- Entry button
-        local entryButton = AceGUI:Create("Button")
-        local buttonText = entry.characterName .. "\n" .. entry.displayTime
+        -- Create clickable text label
+        local entryLabel = AceGUI:Create("InteractiveLabel")
+        local labelText = entry.characterName .. "\n" .. entry.displayTime
         if currentHistoryIndex == i then
-            buttonText = "|cff00ff00" .. buttonText .. "|r"
+            labelText = "|cff00ff00" .. labelText .. "|r"
+        else
+            labelText = "|cffffffff" .. labelText .. "|r"
         end
-        entryButton:SetText(buttonText)
-        entryButton:SetWidth(190)
-        entryButton:SetCallback("OnClick", function()
+        entryLabel:SetText(labelText)
+        entryLabel:SetWidth(160)
+        entryLabel:SetCallback("OnClick", function()
             self:SelectHistoryEntry(i)
         end)
-        entryGroup:AddChild(entryButton)
+        entryLabel.frame:SetPoint("LEFT", entryContainer.frame, "LEFT", 5, 0)
+        entryContainer:AddChild(entryLabel)
 
-        -- Delete button
+        -- Delete button (X)
         local deleteButton = AceGUI:Create("Button")
-        deleteButton:SetText("X")
-        deleteButton:SetWidth(30)
+        deleteButton:SetText("×") -- Unicode multiplication sign (looks like X)
+        deleteButton:SetWidth(20)
+        deleteButton:SetHeight(20)
         deleteButton:SetCallback("OnClick", function()
             self:DeleteHistoryEntry(i)
         end)
-        entryGroup:AddChild(deleteButton)
+        deleteButton.frame:SetPoint("RIGHT", entryContainer.frame, "RIGHT", -5, 0)
+        entryContainer:AddChild(deleteButton)
 
-        mainFrame.historyList:AddChild(entryGroup)
+        mainFrame.historyList:AddChild(entryContainer)
     end
 
     if #gearHistory == 0 then
@@ -517,16 +539,28 @@ end
 
 function GearLister:RefreshCurrentGear()
     if currentHistoryIndex then
+        -- Just refresh the display if viewing history
         self:RefreshGearDisplay()
     else
-        local characterName = inspectMode and self:GetCurrentTargetName() or UnitName("player")
-        if characterName then
-            local items = self:GetEquippedItems(inspectMode and "target" or "player")
-            self:SaveToHistory(characterName, items)
-            self:RefreshMainWindow()
-            self:Print("|cff00ff00Refreshed gear for " .. characterName .. "|r")
-        else
-            self:RefreshGearDisplay()
+        -- Reset state and re-determine target mode (like a fresh /gear call)
+        inspectMode = false
+        inspectTarget = nil
+        currentHistoryIndex = nil
+        ClearInspectPlayer()
+
+        -- Re-determine target mode and fetch fresh gear
+        if self:DetermineTargetMode() then
+            if not inspectMode then
+                -- No inspect mode, get current gear immediately
+                local characterName = UnitName("player")
+                local items = self:GetEquippedItems("player")
+                self:SaveToHistory(characterName, items)
+                self:RefreshMainWindow()
+                self:Print("|cff00ff00Refreshed gear for " .. characterName .. "|r")
+            else
+                -- Inspect mode started, will update when ready
+                self:Print("|cff00ff00Refreshing target gear...|r")
+            end
         end
     end
 end
@@ -553,6 +587,7 @@ end
 function GearLister:ShowSettingsWindow()
     if settingsFrame then
         settingsFrame:Show()
+        settingsFrame:Raise()
         return
     end
 
@@ -561,8 +596,19 @@ function GearLister:ShowSettingsWindow()
     settingsFrame:SetWidth(400)
     settingsFrame:SetHeight(350)
     settingsFrame:SetLayout("Flow")
+
+    -- Make settings window completely opaque and always on top
+    settingsFrame.frame:SetAlpha(1.0)
+    settingsFrame.frame:SetFrameStrata("DIALOG")
+    settingsFrame.frame:SetFrameLevel(100)
+
     settingsFrame:SetCallback("OnClose", function(widget)
         widget:Hide()
+    end)
+
+    -- Ensure it stays on top when shown
+    settingsFrame:SetCallback("OnShow", function(widget)
+        widget.frame:Raise()
     end)
 
     -- Delimiter setting
@@ -660,7 +706,7 @@ function GearLister:UpdateSettingsExample()
     end
 
     local exampleText = "|cff808080Example: Head: Lionheart Helm" ..
-    actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
+        actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
     settingsFrame.exampleLabel:SetText(exampleText)
 end
 
