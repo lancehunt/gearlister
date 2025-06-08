@@ -1,7 +1,18 @@
-## Interface: 11503
+## Interface: 11504
 ## Title: GearLister
-## Notes: Shows equipped gear in a copyable dialog. Use `/gear` or `/gearlist` to invoke. Use `/gear inspect` to list your target's gear. Enjoy!
-## Version: 2.2
+## Notes: Shows equipped gear in a copyable dialog with integrated history panel and Wowhead links
 ## Author: Bunnycrits
+## Version: 3.0.0
+## SavedVariables: GearListerDB
+## OptionalDeps: Ace3
 
+# Ace3 Libraries
+Libs\LibStub\LibStub.lua
+Libs\AceAddon-3.0\AceAddon-3.0.xml
+Libs\AceConsole-3.0\AceConsole-3.0.xml
+Libs\AceEvent-3.0\AceEvent-3.0.xml
+Libs\AceDB-3.0\AceDB-3.0.xml
+Libs\AceGUI-3.0\AceGUI-3.0.xml
+
+# Core addon files
 GearLister.lua
