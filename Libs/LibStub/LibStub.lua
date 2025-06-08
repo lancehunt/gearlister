@@ -1,10 +1,11 @@
 -- LibStub is a simple versioning stub meant for use in Libraries.  http://www.wowace.com/wiki/LibStub for more info
 -- LibStub is hereby placed in the Public Domain Credits: Kaelten, Cladhaire, ckknight, Mikk, Ammo, Nevcairiel, joshborke
-local LIBSTUB_MAJOR, LIBSTUB_MINOR = "LibStub", 2  -- NEVER MAKE THIS AN SVN REVISION! IT NEEDS TO BE USABLE IN ALL REPOS!
+local LIBSTUB_MAJOR, LIBSTUB_MINOR = "LibStub",
+	2                                             -- NEVER MAKE THIS AN SVN REVISION! IT NEEDS TO BE USABLE IN ALL REPOS!
 local LibStub = _G[LIBSTUB_MAJOR]
 
 if not LibStub or LibStub.minor < LIBSTUB_MINOR then
-	LibStub = LibStub or {libs = {}, minors = {} }
+	LibStub = LibStub or { libs = {}, minors = {} }
 	_G[LIBSTUB_MAJOR] = LibStub
 	LibStub.minor = LIBSTUB_MINOR
 
@@ -26,5 +27,6 @@ if not LibStub or LibStub.minor < LIBSTUB_MINOR then
 	end
 
 	function LibStub:IterateLibraries() return pairs(self.libs) end
+
 	setmetatable(LibStub, { __call = LibStub.GetLibrary })
 end

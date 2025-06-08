@@ -353,22 +353,13 @@ function GearLister:ShowMainWindow()
 
     -- Control buttons - positioned manually
     local refreshButton = AceGUI:Create("Button")
-    refreshButton:SetText("Refresh")
-    refreshButton:SetWidth(100)
+    refreshButton:SetText("Refresh & Save")
+    refreshButton:SetWidth(120)
     refreshButton:SetCallback("OnClick", function()
         self:RefreshCurrentGear()
     end)
     refreshButton.frame:SetPoint("BOTTOMLEFT", container.frame, "BOTTOMLEFT", 230, 10)
     container:AddChild(refreshButton)
-
-    local saveButton = AceGUI:Create("Button")
-    saveButton:SetText("Save")
-    saveButton:SetWidth(100)
-    saveButton:SetCallback("OnClick", function()
-        self:SaveCurrentGear()
-    end)
-    saveButton.frame:SetPoint("LEFT", refreshButton.frame, "RIGHT", 10, 0)
-    container:AddChild(saveButton)
 
     local settingsButton = AceGUI:Create("Button")
     settingsButton:SetText("Settings")
@@ -376,7 +367,7 @@ function GearLister:ShowMainWindow()
     settingsButton:SetCallback("OnClick", function()
         self:ShowSettingsWindow()
     end)
-    settingsButton.frame:SetPoint("LEFT", saveButton.frame, "RIGHT", 10, 0)
+    settingsButton.frame:SetPoint("LEFT", refreshButton.frame, "RIGHT", 10, 0)
     container:AddChild(settingsButton)
 
     -- Credit text
@@ -551,28 +542,17 @@ function GearLister:RefreshCurrentGear()
         -- Re-determine target mode and fetch fresh gear
         if self:DetermineTargetMode() then
             if not inspectMode then
-                -- No inspect mode, get current gear immediately
+                -- No inspect mode, get current gear immediately and save
                 local characterName = UnitName("player")
                 local items = self:GetEquippedItems("player")
                 self:SaveToHistory(characterName, items)
                 self:RefreshMainWindow()
-                self:Print("|cff00ff00Refreshed gear for " .. characterName .. "|r")
+                self:Print("|cff00ff00Refreshed and saved gear for " .. characterName .. "|r")
             else
-                -- Inspect mode started, will update when ready
+                -- Inspect mode started, will update and save when ready
                 self:Print("|cff00ff00Refreshing target gear...|r")
             end
         end
-    end
-end
-
-function GearLister:SaveCurrentGear()
-    local characterName = inspectMode and self:GetCurrentTargetName() or UnitName("player")
-    if characterName then
-        local items = self:GetEquippedItems(inspectMode and "target" or "player")
-        self:SaveToHistory(characterName, items)
-        self:Print("|cff00ff00Gear saved to history for " .. characterName .. "|r")
-    else
-        self:Print("|cffff0000Unable to determine character name.|r")
     end
 end
 
@@ -587,7 +567,8 @@ end
 function GearLister:ShowSettingsWindow()
     if settingsFrame then
         settingsFrame:Show()
-        settingsFrame:Raise()
+        settingsFrame.frame:Raise()
+        settingsFrame.frame:SetFrameStrata("FULLSCREEN_DIALOG")
         return
     end
 
@@ -597,19 +578,37 @@ function GearLister:ShowSettingsWindow()
     settingsFrame:SetHeight(350)
     settingsFrame:SetLayout("Flow")
 
-    -- Make settings window completely opaque and always on top
+    -- Force settings window to always be on top with solid background
     settingsFrame.frame:SetAlpha(1.0)
-    settingsFrame.frame:SetFrameStrata("DIALOG")
-    settingsFrame.frame:SetFrameLevel(100)
+    settingsFrame.frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    settingsFrame.frame:SetFrameLevel(200)
+
+    -- Create a solid black background
+    if not settingsFrame.frame.solidBG then
+        settingsFrame.frame.solidBG = settingsFrame.frame:CreateTexture(nil, "BACKGROUND")
+        settingsFrame.frame.solidBG:SetAllPoints(settingsFrame.frame)
+        settingsFrame.frame.solidBG:SetColorTexture(0, 0, 0, 1) -- Solid black
+    end
 
     settingsFrame:SetCallback("OnClose", function(widget)
         widget:Hide()
     end)
 
-    -- Ensure it stays on top when shown
+    -- Ensure it always stays on top
     settingsFrame:SetCallback("OnShow", function(widget)
+        widget.frame:SetFrameStrata("FULLSCREEN_DIALOG")
+        widget.frame:SetFrameLevel(200)
         widget.frame:Raise()
     end)
+
+    -- Force raise when main window is shown
+    if mainFrame then
+        mainFrame:SetCallback("OnShow", function(widget)
+            if settingsFrame and settingsFrame:IsShown() then
+                settingsFrame.frame:Raise()
+            end
+        end)
+    end
 
     -- Delimiter setting
     local delimiterLabel = AceGUI:Create("Label")
