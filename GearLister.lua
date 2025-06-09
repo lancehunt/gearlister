@@ -287,11 +287,11 @@ function GearLister:ShowMainWindow()
         return
     end
 
-    -- Create main window
+    -- Create main window - reduced height by 20% (650 -> 520)
     mainFrame = AceGUI:Create("Frame")
     mainFrame:SetTitle("GearList")
     mainFrame:SetWidth(900)
-    mainFrame:SetHeight(650)
+    mainFrame:SetHeight(520)
     mainFrame:SetLayout("Fill")
     mainFrame:SetCallback("OnClose", function(widget)
         inspectMode = false
@@ -315,10 +315,10 @@ function GearLister:ShowMainWindow()
     historyLabel.frame:SetPoint("TOPLEFT", container.frame, "TOPLEFT", 10, -10)
     container:AddChild(historyLabel)
 
-    -- History list
+    -- History list - reduced height by 20% (500 -> 400)
     local historyList = AceGUI:Create("ScrollFrame")
     historyList:SetWidth(200)
-    historyList:SetHeight(500)
+    historyList:SetHeight(400)
     historyList:SetLayout("List")
     historyList.frame:SetPoint("TOPLEFT", historyLabel.frame, "BOTTOMLEFT", 0, -5)
     container:AddChild(historyList)
@@ -326,9 +326,9 @@ function GearLister:ShowMainWindow()
     -- Store reference to history list
     mainFrame.historyList = historyList
 
-    -- Current gear button
+    -- Current gear button - changed label to "Refresh"
     local currentButton = AceGUI:Create("Button")
-    currentButton:SetText("Current Gear")
+    currentButton:SetText("Refresh")
     currentButton:SetFullWidth(true)
     currentButton:SetCallback("OnClick", function()
         self:SelectCurrentGear()
@@ -379,10 +379,10 @@ function GearLister:ShowMainWindow()
     container:AddChild(textToggle)
     mainFrame.textToggle = textToggle
 
-    -- Gear display (will be split in comparison mode)
+    -- Gear display - reduced height by 20% (420 -> 336)
     local gearEditBox = AceGUI:Create("MultiLineEditBox")
     gearEditBox:SetWidth(600)
-    gearEditBox:SetHeight(420) -- Use height instead of lines to fill more space
+    gearEditBox:SetHeight(336)
     gearEditBox:DisableButton(true)
     gearEditBox.frame:SetPoint("TOPLEFT", gearLabel.frame, "BOTTOMLEFT", 0, -5)
     gearEditBox.frame:SetPoint("BOTTOMRIGHT", container.frame, "BOTTOMRIGHT", -20, 50) -- Anchor to bottom
@@ -437,7 +437,7 @@ function GearLister:RefreshHistoryList()
     local children = {}
     for i, child in ipairs(mainFrame.historyList.children) do
         if i == 1 then
-            -- Keep the Current Gear button
+            -- Keep the Refresh button
             children[1] = child
         else
             child:Release()
@@ -448,9 +448,9 @@ function GearLister:RefreshHistoryList()
     -- Update current gear button highlighting
     if children[1] then
         if not currentHistoryIndex and not comparisonMode then
-            children[1]:SetText("|cff00ff00Current Gear|r")
+            children[1]:SetText("|cff00ff00Refresh|r")
         else
-            children[1]:SetText("Current Gear")
+            children[1]:SetText("Refresh")
         end
     end
 
@@ -520,7 +520,7 @@ function GearLister:RefreshHistoryList()
     if comparisonMode then
         local instructionLabel = AceGUI:Create("Label")
         instructionLabel:SetText(
-        "|cffff9900Click entries to select:\n[A] First character (green)\n[B] Second character (blue)|r")
+            "|cffff9900Click entries to select:\n[A] First character (green)\n[B] Second character (blue)|r")
         instructionLabel:SetFullWidth(true)
         mainFrame.historyList:AddChild(instructionLabel)
     end
@@ -595,7 +595,7 @@ function GearLister:RefreshGearDisplay()
                     if mainFrame.gearEditBox then
                         mainFrame.gearEditBox.frame:Show()
                         mainFrame.gearEditBox:SetText("Visual comparison mode error - using text fallback:\n\n" ..
-                        self:CompareGearSets(entryA, entryB))
+                            self:CompareGearSets(entryA, entryB))
                     end
                 end
             end
@@ -693,12 +693,12 @@ function GearLister:RefreshGearDisplay()
                     local gearHistory = self.db.profile.gearHistory
                     if gearHistory[comparisonIndexA] then
                         gearText = gearText ..
-                        "First character selected: " .. gearHistory[comparisonIndexA].characterName .. "\n"
+                            "First character selected: " .. gearHistory[comparisonIndexA].characterName .. "\n"
                         gearText = gearText .. "Now select a second character to compare."
                     end
                 else
                     gearText = gearText ..
-                    "Click on a character in the history list to select them as the first character for comparison."
+                        "Click on a character in the history list to select them as the first character for comparison."
                 end
             end
             titleSuffix = " - Comparison Mode"
@@ -753,23 +753,23 @@ end
 
 -- Visual gear display layout (like character pane)
 local GEAR_SLOT_POSITIONS = {
-    [1] = { x = 50, y = -50 }, -- Head
-    [2] = { x = 50, y = -90 }, -- Neck
-    [3] = { x = 10, y = -50 }, -- Shoulders
-    [15] = { x = 10, y = -90 }, -- Back
-    [5] = { x = 50, y = -130 }, -- Chest
-    [9] = { x = 10, y = -130 }, -- Wrist
+    [1] = { x = 50, y = -50 },   -- Head
+    [2] = { x = 50, y = -90 },   -- Neck
+    [3] = { x = 10, y = -50 },   -- Shoulders
+    [15] = { x = 10, y = -90 },  -- Back
+    [5] = { x = 50, y = -130 },  -- Chest
+    [9] = { x = 10, y = -130 },  -- Wrist
     [10] = { x = 50, y = -170 }, -- Gloves
-    [6] = { x = 50, y = -210 }, -- Belt
-    [7] = { x = 50, y = -250 }, -- Legs
-    [8] = { x = 50, y = -290 }, -- Feet
+    [6] = { x = 50, y = -210 },  -- Belt
+    [7] = { x = 50, y = -250 },  -- Legs
+    [8] = { x = 50, y = -290 },  -- Feet
     [11] = { x = 90, y = -170 }, -- Ring1
     [12] = { x = 90, y = -210 }, -- Ring2
-    [13] = { x = 90, y = -50 }, -- Trinket1
-    [14] = { x = 90, y = -90 }, -- Trinket2
+    [13] = { x = 90, y = -50 },  -- Trinket1
+    [14] = { x = 90, y = -90 },  -- Trinket2
     [16] = { x = 10, y = -250 }, -- Main Hand
     [17] = { x = 90, y = -250 }, -- Off Hand
-    [18] = { x = 90, y = -130 } -- Ranged
+    [18] = { x = 90, y = -130 }  -- Ranged
 }
 
 function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, comparisonItems)
@@ -1003,7 +1003,7 @@ end
 function GearLister:CompareGearSets(entryA, entryB)
     local comparisonText = "|cffffff00=== GEAR COMPARISON ===|r\n"
     comparisonText = comparisonText ..
-    "|cff00ff00" .. entryA.characterName .. "|r vs |cff0099ff" .. entryB.characterName .. "|r\n\n"
+        "|cff00ff00" .. entryA.characterName .. "|r vs |cff0099ff" .. entryB.characterName .. "|r\n\n"
 
     -- Create item maps for easier comparison
     local itemsA = {}
@@ -1296,7 +1296,7 @@ function GearLister:UpdateSettingsExample()
     end
 
     local exampleText = "|cff808080Example: Head: Lionheart Helm" ..
-    actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
+        actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
     settingsFrame.exampleLabel:SetText(exampleText)
 end
 
