@@ -78,6 +78,7 @@ local currentHistoryIndex = nil
 local comparisonMode = false
 local comparisonIndexA = nil
 local comparisonIndexB = nil
+local visualMode = false -- New: toggle between text list and visual icons
 
 function GearLister:OnInitialize()
     -- Initialize database
@@ -142,7 +143,8 @@ function GearLister:GetEquippedItems(unit)
             local itemId = self:GetItemIdFromLink(itemLink)
             if itemName and itemId then
                 local wowheadLink = "https://classic.wowhead.com/item=" .. itemId
-                local itemEntry = slotName .. ": " .. itemName .. actualDelimiter .. wowheadLink
+                -- Store both the formatted text and the item link for visual mode
+                local itemEntry = slotName .. ": " .. itemLink .. actualDelimiter .. wowheadLink
                 table.insert(items, itemEntry)
             end
         end
@@ -356,6 +358,18 @@ function GearLister:ShowMainWindow()
     container:AddChild(comparisonToggle)
     mainFrame.comparisonToggle = comparisonToggle
 
+    -- Visual mode toggle
+    local visualToggle = AceGUI:Create("CheckBox")
+    visualToggle:SetLabel("Visual Mode")
+    visualToggle:SetValue(visualMode)
+    visualToggle:SetWidth(120)
+    visualToggle:SetCallback("OnValueChanged", function(widget, event, value)
+        self:ToggleVisualMode(value)
+    end)
+    visualToggle.frame:SetPoint("TOPRIGHT", container.frame, "TOPRIGHT", -170, -10)
+    container:AddChild(visualToggle)
+    mainFrame.visualToggle = visualToggle
+
     -- Gear display (will be split in comparison mode)
     local gearEditBox = AceGUI:Create("MultiLineEditBox")
     gearEditBox:SetWidth(600)
@@ -376,6 +390,7 @@ function GearLister:ShowMainWindow()
     end)
     refreshButton.frame:SetPoint("BOTTOMLEFT", container.frame, "BOTTOMLEFT", 230, 10)
     container:AddChild(refreshButton)
+    mainFrame.inspectButton = refreshButton
 
     local settingsButton = AceGUI:Create("Button")
     settingsButton:SetText("Settings")
@@ -501,54 +516,345 @@ function GearLister:RefreshHistoryList()
 end
 
 function GearLister:RefreshGearDisplay()
-    if not mainFrame or not mainFrame.gearEditBox then return end
+    if not mainFrame then return end
+
+    -- Clear any existing visual displays
+    if mainFrame.visualDisplayA then
+        mainFrame.visualDisplayA:Hide()
+        mainFrame.visualDisplayA = nil
+    end
+    if mainFrame.visualDisplayB then
+        mainFrame.visualDisplayB:Hide()
+        mainFrame.visualDisplayB = nil
+    end
+    if mainFrame.visualDisplaySingle then
+        mainFrame.visualDisplaySingle:Hide()
+        mainFrame.visualDisplaySingle = nil
+    end
 
     local gearText = ""
     local titleSuffix = ""
 
-    if currentHistoryIndex then
-        -- Show history entry
-        local gearHistory = self.db.profile.gearHistory
-        if gearHistory[currentHistoryIndex] then
-            local entry = gearHistory[currentHistoryIndex]
-            gearText = table.concat(entry.items, "\n")
-            titleSuffix = " - " .. entry.characterName .. " (" .. entry.displayTime .. ")"
+    if visualMode then
+        -- Visual mode - hide text box and show gear icons
+        if mainFrame.gearEditBox then
+            mainFrame.gearEditBox.frame:Hide()
+        end
+
+        if comparisonMode and comparisonIndexA and comparisonIndexB then
+            -- Visual comparison mode
+            local gearHistory = self.db.profile.gearHistory
+            local entryA = gearHistory[comparisonIndexA]
+            local entryB = gearHistory[comparisonIndexB]
+
+            if entryA and entryB then
+                -- Create side-by-side visual displays using the container frame as parent
+                local containerFrame = nil
+                for i, child in ipairs(mainFrame.children) do
+                    if child.frame and child.frame:GetObjectType() == "Frame" then
+                        containerFrame = child.frame
+                        break
+                    end
+                end
+
+                if containerFrame then
+                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(containerFrame, entryA.items, 250, -100)
+                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(containerFrame, entryB.items, 450, -100)
+
+                    -- Add character labels
+                    local labelA = mainFrame.visualDisplayA:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+                    labelA:SetPoint("TOP", mainFrame.visualDisplayA, "TOP", 0, 20)
+                    labelA:SetText("|cff00ff00" .. entryA.characterName .. "|r")
+
+                    local labelB = mainFrame.visualDisplayB:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+                    labelB:SetPoint("TOP", mainFrame.visualDisplayB, "TOP", 0, 20)
+                    labelB:SetText("|cff0099ff" .. entryB.characterName .. "|r")
+
+                    titleSuffix = " - Visual Comparison: " .. entryA.characterName .. " vs " .. entryB.characterName
+                else
+                    -- Fallback to text mode if container not found
+                    if mainFrame.gearEditBox then
+                        mainFrame.gearEditBox.frame:Show()
+                        mainFrame.gearEditBox:SetText("Visual comparison mode error - using text fallback:\n\n" ..
+                        self:CompareGearSets(entryA, entryB))
+                    end
+                end
+            end
+        else
+            -- Single character visual mode
+            local items = {}
+            local characterName = ""
+
+            if currentHistoryIndex then
+                local gearHistory = self.db.profile.gearHistory
+                if gearHistory[currentHistoryIndex] then
+                    local entry = gearHistory[currentHistoryIndex]
+                    items = entry.items
+                    characterName = entry.characterName
+                    titleSuffix = " - Visual: " .. entry.characterName
+                end
+            else
+                -- Current gear
+                local targetUnit = "player"
+                characterName = UnitName("player")
+
+                if inspectMode then
+                    local currentTarget = self:GetCurrentTargetName()
+                    if currentTarget then
+                        targetUnit = "target"
+                        characterName = currentTarget
+                        titleSuffix = " - Visual: " .. characterName
+                    else
+                        self:Print("|cffff0000Target lost, showing your gear instead.|r")
+                        inspectMode = false
+                        inspectTarget = nil
+                        ClearInspectPlayer()
+                        titleSuffix = " - Visual: " .. characterName
+                    end
+                else
+                    titleSuffix = " - Visual: " .. characterName
+                end
+
+                items = self:GetEquippedItems(targetUnit)
+
+                -- Auto-save current gear to history (but not in comparison mode)
+                if characterName and not comparisonMode then
+                    self:SaveToHistory(characterName, items)
+                end
+            end
+
+            if #items > 0 then
+                -- Find the container frame to attach to
+                local containerFrame = nil
+                for i, child in ipairs(mainFrame.children) do
+                    if child.frame and child.frame:GetObjectType() == "Frame" then
+                        containerFrame = child.frame
+                        break
+                    end
+                end
+
+                if containerFrame then
+                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(containerFrame, items, 350, -100)
+
+                    -- Add character label
+                    local label = mainFrame.visualDisplaySingle:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+                    label:SetPoint("TOP", mainFrame.visualDisplaySingle, "TOP", 0, 20)
+                    label:SetText("|cffffffff" .. characterName .. "|r")
+                else
+                    -- Fallback to text mode
+                    if mainFrame.gearEditBox then
+                        mainFrame.gearEditBox.frame:Show()
+                        mainFrame.gearEditBox:SetText(table.concat(items, "\n"))
+                    end
+                end
+            end
         end
     else
-        -- Show current gear
-        local targetUnit = "player"
-        local characterName = UnitName("player")
+        -- Text mode - show text box and hide visual displays
+        if mainFrame.gearEditBox then
+            mainFrame.gearEditBox.frame:Show()
+        end
 
-        if inspectMode then
-            local currentTarget = self:GetCurrentTargetName()
-            if currentTarget then
-                targetUnit = "target"
-                characterName = currentTarget
-                titleSuffix = " - " .. characterName
+        if comparisonMode then
+            -- Text comparison mode
+            if comparisonIndexA and comparisonIndexB then
+                local gearHistory = self.db.profile.gearHistory
+                local entryA = gearHistory[comparisonIndexA]
+                local entryB = gearHistory[comparisonIndexB]
+
+                if entryA and entryB then
+                    gearText = self:CompareGearSets(entryA, entryB)
+                    titleSuffix = " - Comparison Mode"
+                else
+                    gearText = "Error: Invalid comparison entries selected."
+                end
             else
-                self:Print("|cffff0000Target lost, showing your gear instead.|r")
-                inspectMode = false
-                inspectTarget = nil
-                ClearInspectPlayer()
+                gearText = "Comparison Mode: Select two characters from history to compare their gear.\n\n"
+                if comparisonIndexA then
+                    local gearHistory = self.db.profile.gearHistory
+                    if gearHistory[comparisonIndexA] then
+                        gearText = gearText ..
+                        "First character selected: " .. gearHistory[comparisonIndexA].characterName .. "\n"
+                        gearText = gearText .. "Now select a second character to compare."
+                    end
+                else
+                    gearText = gearText ..
+                    "Click on a character in the history list to select them as the first character for comparison."
+                end
+            end
+            titleSuffix = " - Comparison Mode"
+        elseif currentHistoryIndex then
+            -- Show history entry
+            local gearHistory = self.db.profile.gearHistory
+            if gearHistory[currentHistoryIndex] then
+                local entry = gearHistory[currentHistoryIndex]
+                gearText = table.concat(entry.items, "\n")
+                titleSuffix = " - " .. entry.characterName .. " (" .. entry.displayTime .. ")"
+            end
+        else
+            -- Show current gear
+            local targetUnit = "player"
+            local characterName = UnitName("player")
+
+            if inspectMode then
+                local currentTarget = self:GetCurrentTargetName()
+                if currentTarget then
+                    targetUnit = "target"
+                    characterName = currentTarget
+                    titleSuffix = " - " .. characterName
+                else
+                    self:Print("|cffff0000Target lost, showing your gear instead.|r")
+                    inspectMode = false
+                    inspectTarget = nil
+                    ClearInspectPlayer()
+                end
+            end
+
+            local items = self:GetEquippedItems(targetUnit)
+            gearText = table.concat(items, "\n")
+
+            -- Auto-save current gear to history (but not in comparison mode)
+            if characterName and not comparisonMode then
+                self:SaveToHistory(characterName, items)
             end
         end
 
-        local items = self:GetEquippedItems(targetUnit)
-        gearText = table.concat(items, "\n")
-
-        -- Auto-save current gear to history
-        if characterName then
-            self:SaveToHistory(characterName, items)
+        if mainFrame.gearEditBox then
+            mainFrame.gearEditBox:SetText(gearText)
         end
     end
 
-    mainFrame.gearEditBox:SetText(gearText)
     mainFrame:SetTitle("GearLister - Equipped Gear with Wowhead Links" .. titleSuffix)
 end
 
 function GearLister:SelectCurrentGear()
     currentHistoryIndex = nil
     self:RefreshMainWindow()
+end
+
+-- Visual gear display layout (like character pane)
+local GEAR_SLOT_POSITIONS = {
+    [1] = { x = 50, y = -50 }, -- Head
+    [2] = { x = 50, y = -90 }, -- Neck
+    [3] = { x = 10, y = -50 }, -- Shoulders
+    [15] = { x = 10, y = -90 }, -- Back
+    [5] = { x = 50, y = -130 }, -- Chest
+    [9] = { x = 10, y = -130 }, -- Wrist
+    [10] = { x = 50, y = -170 }, -- Gloves
+    [6] = { x = 50, y = -210 }, -- Belt
+    [7] = { x = 50, y = -250 }, -- Legs
+    [8] = { x = 50, y = -290 }, -- Feet
+    [11] = { x = 90, y = -170 }, -- Ring1
+    [12] = { x = 90, y = -210 }, -- Ring2
+    [13] = { x = 90, y = -50 }, -- Trinket1
+    [14] = { x = 90, y = -90 }, -- Trinket2
+    [16] = { x = 10, y = -250 }, -- Main Hand
+    [17] = { x = 90, y = -250 }, -- Off Hand
+    [18] = { x = 90, y = -130 } -- Ranged
+}
+
+function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY)
+    local visualFrame = CreateFrame("Frame", nil, parent)
+    visualFrame:SetSize(140, 350) -- Size for gear layout
+    visualFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", offsetX or 0, offsetY or -40)
+
+    -- Create item map for easy lookup
+    local itemMap = {}
+    for _, item in ipairs(items) do
+        local slot = string.match(item, "^([^:]+):")
+        if slot then
+            itemMap[slot] = item
+        end
+    end
+
+    -- Create gear slot buttons
+    local gearButtons = {}
+    for _, slotInfo in ipairs(DISPLAY_ORDER) do
+        local slotId = slotInfo.slot
+        local slotName = slotInfo.name
+        local pos = GEAR_SLOT_POSITIONS[slotId]
+
+        if pos then
+            local button = CreateFrame("Button", nil, visualFrame)
+            button:SetSize(32, 32)
+            button:SetPoint("TOPLEFT", visualFrame, "TOPLEFT", pos.x, pos.y)
+
+            -- Create border
+            button.border = button:CreateTexture(nil, "BACKGROUND")
+            button.border:SetAllPoints()
+            button.border:SetTexture("Interface\\Buttons\\UI-EmptySlot")
+
+            -- Create icon texture
+            button.icon = button:CreateTexture(nil, "ARTWORK")
+            button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
+            button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
+
+            -- Get item for this slot
+            local itemData = itemMap[slotName]
+            if itemData then
+                -- Extract item link from the saved data - look for item link pattern
+                local itemLink = string.match(itemData, "(|c%x+|Hitem:[^|]+|h[^|]+|h|r)")
+                if itemLink then
+                    local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemLink)
+                    if texture then
+                        button.icon:SetTexture(texture)
+                        button.border:SetTexture("Interface\\Buttons\\UI-Slot-Background")
+
+                        -- Set up tooltip
+                        button.itemLink = itemLink
+                        button:SetScript("OnEnter", function(self)
+                            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                            GameTooltip:SetHyperlink(self.itemLink)
+                            GameTooltip:Show()
+                        end)
+                        button:SetScript("OnLeave", function(self)
+                            GameTooltip:Hide()
+                        end)
+                    else
+                        -- Item not cached yet, show placeholder and try to load
+                        button.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+                        -- Try to load the item info
+                        local itemString = string.match(itemLink, "item:([^|]+)")
+                        if itemString then
+                            local itemID = string.match(itemString, "^(%d+)")
+                            if itemID then
+                                -- Force item loading
+                                GetItemInfo(tonumber(itemID))
+                            end
+                        end
+                    end
+                else
+                    -- No item link found, show empty slot
+                    button.icon:SetTexture(nil)
+                end
+            else
+                -- Empty slot
+                button.icon:SetTexture(nil)
+            end
+
+            -- Add slot label
+            button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            button.label:SetPoint("BOTTOM", button, "TOP", 0, 2)
+            button.label:SetText(slotName)
+            button.label:SetTextColor(0.8, 0.8, 0.8)
+
+            gearButtons[slotId] = button
+        end
+    end
+
+    return visualFrame, gearButtons
+end
+
+function GearLister:ToggleVisualMode(enabled)
+    visualMode = enabled
+
+    if enabled then
+        self:Print("|cff00ff00Visual Mode enabled - showing gear as icons.|r")
+    else
+        self:Print("|cff00ff00Visual Mode disabled - showing text list.|r")
+    end
+
+    self:RefreshGearDisplay()
 end
 
 function GearLister:SelectHistoryEntry(index)
@@ -633,26 +939,69 @@ function GearLister:CompareGearSets(entryA, entryB)
 
         if itemA and itemB then
             -- Both have items - extract item names for comparison
-            local nameA = string.match(itemA, slotName .. ": ([^" .. self:GetActualDelimiter() .. "]+)")
-            local nameB = string.match(itemB, slotName .. ": ([^" .. self:GetActualDelimiter() .. "]+)")
+            -- Handle both old format (item name) and new format (item link)
+            local nameA, nameB
 
-            if nameA == nameB then
-                -- Same item
-                comparisonText = comparisonText .. "|cff808080" .. slotName .. ": " .. nameA .. " (Same)|r\n"
+            -- Try to extract from item link first, then fall back to plain text
+            local linkA = string.match(itemA, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
+            if linkA then
+                nameA = string.match(linkA, "|h([^|]+)|h")
             else
-                -- Different items
-                comparisonText = comparisonText .. "|cffffff00" .. slotName .. ":|r\n"
-                comparisonText = comparisonText .. "  |cff00ff00A: " .. nameA .. "|r\n"
-                comparisonText = comparisonText .. "  |cff0099ffB: " .. nameB .. "|r\n"
+                nameA = string.match(itemA,
+                    slotName ..
+                    ": ([^" .. string.gsub(self:GetActualDelimiter(), "([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1") .. "]+)")
+            end
+
+            local linkB = string.match(itemB, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
+            if linkB then
+                nameB = string.match(linkB, "|h([^|]+)|h")
+            else
+                nameB = string.match(itemB,
+                    slotName ..
+                    ": ([^" .. string.gsub(self:GetActualDelimiter(), "([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1") .. "]+)")
+            end
+
+            if nameA and nameB then
+                if nameA == nameB then
+                    -- Same item
+                    comparisonText = comparisonText .. "|cff808080" .. slotName .. ": " .. nameA .. " (Same)|r\n"
+                else
+                    -- Different items
+                    comparisonText = comparisonText .. "|cffffff00" .. slotName .. ":|r\n"
+                    comparisonText = comparisonText .. "  |cff00ff00A: " .. nameA .. "|r\n"
+                    comparisonText = comparisonText .. "  |cff0099ffB: " .. nameB .. "|r\n"
+                end
             end
         elseif itemA and not itemB then
             -- A has item, B doesn't
-            local nameA = string.match(itemA, slotName .. ": ([^" .. self:GetActualDelimiter() .. "]+)")
-            comparisonText = comparisonText .. "|cffff0000" .. slotName .. ": " .. nameA .. " (B missing)|r\n"
+            local nameA
+            local linkA = string.match(itemA, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
+            if linkA then
+                nameA = string.match(linkA, "|h([^|]+)|h")
+            else
+                nameA = string.match(itemA,
+                    slotName ..
+                    ": ([^" .. string.gsub(self:GetActualDelimiter(), "([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1") .. "]+)")
+            end
+
+            if nameA then
+                comparisonText = comparisonText .. "|cffff0000" .. slotName .. ": " .. nameA .. " (B missing)|r\n"
+            end
         elseif not itemA and itemB then
             -- B has item, A doesn't
-            local nameB = string.match(itemB, slotName .. ": ([^" .. self:GetActualDelimiter() .. "]+)")
-            comparisonText = comparisonText .. "|cffff9900" .. slotName .. ": " .. nameB .. " (A missing)|r\n"
+            local nameB
+            local linkB = string.match(itemB, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
+            if linkB then
+                nameB = string.match(linkB, "|h([^|]+)|h")
+            else
+                nameB = string.match(itemB,
+                    slotName ..
+                    ": ([^" .. string.gsub(self:GetActualDelimiter(), "([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1") .. "]+)")
+            end
+
+            if nameB then
+                comparisonText = comparisonText .. "|cffff9900" .. slotName .. ": " .. nameB .. " (A missing)|r\n"
+            end
         end
         -- If neither has item, skip the slot
     end
