@@ -75,6 +75,9 @@ local settingsFrame = nil
 local inspectMode = false
 local inspectTarget = nil
 local currentHistoryIndex = nil
+local comparisonMode = false
+local comparisonIndexA = nil
+local comparisonIndexB = nil
 
 function GearLister:OnInitialize()
     -- Initialize database
@@ -341,7 +344,19 @@ function GearLister:ShowMainWindow()
     gearLabel.frame:SetPoint("TOPLEFT", container.frame, "TOPLEFT", 230, -10)
     container:AddChild(gearLabel)
 
-    -- Gear display
+    -- Comparison mode toggle
+    local comparisonToggle = AceGUI:Create("CheckBox")
+    comparisonToggle:SetLabel("Comparison Mode")
+    comparisonToggle:SetValue(comparisonMode)
+    comparisonToggle:SetWidth(150)
+    comparisonToggle:SetCallback("OnValueChanged", function(widget, event, value)
+        self:ToggleComparisonMode(value)
+    end)
+    comparisonToggle.frame:SetPoint("TOPRIGHT", container.frame, "TOPRIGHT", -10, -10)
+    container:AddChild(comparisonToggle)
+    mainFrame.comparisonToggle = comparisonToggle
+
+    -- Gear display (will be split in comparison mode)
     local gearEditBox = AceGUI:Create("MultiLineEditBox")
     gearEditBox:SetWidth(600)
     gearEditBox:SetNumLines(20)
@@ -406,7 +421,7 @@ function GearLister:RefreshHistoryList()
 
     -- Update current gear button highlighting
     if children[1] then
-        if not currentHistoryIndex then
+        if not currentHistoryIndex and not comparisonMode then
             children[1]:SetText("|cff00ff00Current Gear|r")
         else
             children[1]:SetText("Current Gear")
@@ -424,15 +439,32 @@ function GearLister:RefreshHistoryList()
         -- Create clickable text label
         local entryLabel = AceGUI:Create("InteractiveLabel")
         local labelText = entry.characterName .. "\n" .. entry.displayTime
-        if currentHistoryIndex == i then
-            labelText = "|cff00ff00" .. labelText .. "|r"
+
+        -- Color coding for different modes
+        if comparisonMode then
+            if comparisonIndexA == i then
+                labelText = "|cff00ff00[A] " .. labelText .. "|r"
+            elseif comparisonIndexB == i then
+                labelText = "|cff0099ff[B] " .. labelText .. "|r"
+            else
+                labelText = "|cffffffff" .. labelText .. "|r"
+            end
         else
-            labelText = "|cffffffff" .. labelText .. "|r"
+            if currentHistoryIndex == i then
+                labelText = "|cff00ff00" .. labelText .. "|r"
+            else
+                labelText = "|cffffffff" .. labelText .. "|r"
+            end
         end
+
         entryLabel:SetText(labelText)
         entryLabel:SetWidth(160)
         entryLabel:SetCallback("OnClick", function()
-            self:SelectHistoryEntry(i)
+            if comparisonMode then
+                self:SelectComparisonEntry(i)
+            else
+                self:SelectHistoryEntry(i)
+            end
         end)
         entryLabel.frame:SetPoint("LEFT", entryContainer.frame, "LEFT", 5, 0)
         entryContainer:AddChild(entryLabel)
@@ -456,6 +488,15 @@ function GearLister:RefreshHistoryList()
         emptyLabel:SetText("|cff808080No history available|r")
         emptyLabel:SetFullWidth(true)
         mainFrame.historyList:AddChild(emptyLabel)
+    end
+
+    -- Add comparison instructions if in comparison mode
+    if comparisonMode then
+        local instructionLabel = AceGUI:Create("Label")
+        instructionLabel:SetText(
+        "|cffff9900Click entries to select:\n[A] First character (green)\n[B] Second character (blue)|r")
+        instructionLabel:SetFullWidth(true)
+        mainFrame.historyList:AddChild(instructionLabel)
     end
 end
 
@@ -513,6 +554,110 @@ end
 function GearLister:SelectHistoryEntry(index)
     currentHistoryIndex = index
     self:RefreshMainWindow()
+end
+
+function GearLister:ToggleComparisonMode(enabled)
+    comparisonMode = enabled
+
+    if enabled then
+        -- Entering comparison mode
+        currentHistoryIndex = nil
+        comparisonIndexA = nil
+        comparisonIndexB = nil
+        self:Print("|cff00ff00Comparison Mode enabled. Click two history entries to compare.|r")
+
+        -- Hide inspect button in comparison mode
+        if mainFrame and mainFrame.inspectButton then
+            mainFrame.inspectButton.frame:Hide()
+        end
+    else
+        -- Exiting comparison mode
+        comparisonIndexA = nil
+        comparisonIndexB = nil
+        self:Print("|cff00ff00Comparison Mode disabled.|r")
+
+        -- Show inspect button again
+        if mainFrame and mainFrame.inspectButton then
+            mainFrame.inspectButton.frame:Show()
+        end
+    end
+
+    self:RefreshMainWindow()
+end
+
+function GearLister:SelectComparisonEntry(index)
+    if not comparisonIndexA then
+        comparisonIndexA = index
+        self:Print("|cff00ff00Selected first character for comparison.|r")
+    elseif not comparisonIndexB and comparisonIndexA ~= index then
+        comparisonIndexB = index
+        self:Print("|cff0099ffSelected second character for comparison.|r")
+    else
+        -- Reset selection
+        comparisonIndexA = index
+        comparisonIndexB = nil
+        self:Print("|cff00ff00Reset comparison - selected new first character.|r")
+    end
+
+    self:RefreshMainWindow()
+end
+
+function GearLister:CompareGearSets(entryA, entryB)
+    local comparisonText = "|cffffff00=== GEAR COMPARISON ===|r\n"
+    comparisonText = comparisonText ..
+    "|cff00ff00" .. entryA.characterName .. "|r vs |cff0099ff" .. entryB.characterName .. "|r\n\n"
+
+    -- Create item maps for easier comparison
+    local itemsA = {}
+    local itemsB = {}
+
+    for _, item in ipairs(entryA.items) do
+        local slot = string.match(item, "^([^:]+):")
+        if slot then
+            itemsA[slot] = item
+        end
+    end
+
+    for _, item in ipairs(entryB.items) do
+        local slot = string.match(item, "^([^:]+):")
+        if slot then
+            itemsB[slot] = item
+        end
+    end
+
+    -- Compare each slot
+    for _, slotInfo in ipairs(DISPLAY_ORDER) do
+        local slotName = slotInfo.name
+        local itemA = itemsA[slotName]
+        local itemB = itemsB[slotName]
+
+        if itemA and itemB then
+            -- Both have items - extract item names for comparison
+            local nameA = string.match(itemA, slotName .. ": ([^" .. self:GetActualDelimiter() .. "]+)")
+            local nameB = string.match(itemB, slotName .. ": ([^" .. self:GetActualDelimiter() .. "]+)")
+
+            if nameA == nameB then
+                -- Same item
+                comparisonText = comparisonText .. "|cff808080" .. slotName .. ": " .. nameA .. " (Same)|r\n"
+            else
+                -- Different items
+                comparisonText = comparisonText .. "|cffffff00" .. slotName .. ":|r\n"
+                comparisonText = comparisonText .. "  |cff00ff00A: " .. nameA .. "|r\n"
+                comparisonText = comparisonText .. "  |cff0099ffB: " .. nameB .. "|r\n"
+            end
+        elseif itemA and not itemB then
+            -- A has item, B doesn't
+            local nameA = string.match(itemA, slotName .. ": ([^" .. self:GetActualDelimiter() .. "]+)")
+            comparisonText = comparisonText .. "|cffff0000" .. slotName .. ": " .. nameA .. " (B missing)|r\n"
+        elseif not itemA and itemB then
+            -- B has item, A doesn't
+            local nameB = string.match(itemB, slotName .. ": ([^" .. self:GetActualDelimiter() .. "]+)")
+            comparisonText = comparisonText .. "|cffff9900" .. slotName .. ": " .. nameB .. " (A missing)|r\n"
+        end
+        -- If neither has item, skip the slot
+    end
+
+    return comparisonText
 end
 
 function GearLister:DeleteHistoryEntry(index)
@@ -706,7 +851,7 @@ function GearLister:UpdateSettingsExample()
     end
 
     local exampleText = "|cff808080Example: Head: Lionheart Helm" ..
-        actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
+    actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
     settingsFrame.exampleLabel:SetText(exampleText)
 end
 
