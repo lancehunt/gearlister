@@ -570,9 +570,9 @@ function GearLister:RefreshGearDisplay()
 
                 if containerFrame then
                     -- Pass comparison data to highlight differences
-                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(containerFrame, entryA.items, 250, -100,
+                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(containerFrame, entryA.items, 250, -60,
                         entryB.items)
-                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(containerFrame, entryB.items, 450, -100,
+                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(containerFrame, entryB.items, 450, -60,
                         entryA.items)
 
                     -- Add character labels
@@ -653,7 +653,7 @@ function GearLister:RefreshGearDisplay()
                 end
 
                 if containerFrame then
-                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(containerFrame, items, 350, -100)
+                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(containerFrame, items, 350, -60)
 
                     -- Add character label
                     local label = mainFrame.visualDisplaySingle:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
