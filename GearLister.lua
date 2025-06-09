@@ -81,6 +81,10 @@ local comparisonIndexB = nil
 local visualMode = false -- New: toggle between text list and visual icons
 
 function GearLister:OnInitialize()
+    -- Get version from TOC file
+    local version = GetAddOnMetadata("GearLister", "Version") or "Unknown"
+    self.version = version
+
     -- Initialize database
     self.db = AceDB:New("GearListerDB", defaults, true)
 
@@ -373,9 +377,10 @@ function GearLister:ShowMainWindow()
     -- Gear display (will be split in comparison mode)
     local gearEditBox = AceGUI:Create("MultiLineEditBox")
     gearEditBox:SetWidth(600)
-    gearEditBox:SetNumLines(20)
+    gearEditBox:SetHeight(420) -- Use height instead of lines to fill more space
     gearEditBox:DisableButton(true)
     gearEditBox.frame:SetPoint("TOPLEFT", gearLabel.frame, "BOTTOMLEFT", 0, -5)
+    gearEditBox.frame:SetPoint("BOTTOMRIGHT", container.frame, "BOTTOMRIGHT", -20, 50) -- Anchor to bottom
     container:AddChild(gearEditBox)
 
     -- Store reference to gear display
@@ -401,9 +406,10 @@ function GearLister:ShowMainWindow()
     settingsButton.frame:SetPoint("LEFT", refreshButton.frame, "RIGHT", 10, 0)
     container:AddChild(settingsButton)
 
-    -- Credit text
+    -- Credit text with version
     local creditText = AceGUI:Create("Label")
-    creditText:SetText("|cff808080Made with <3 by Bunnycrits|r")
+    local version = self.version or "Unknown"
+    creditText:SetText("|cff808080Made with <3 by Bunnycrits (v" .. version .. ")|r")
     creditText:SetWidth(200)
     creditText.frame:SetPoint("BOTTOM", container.frame, "BOTTOM", 0, -5)
     container:AddChild(creditText)
@@ -755,7 +761,7 @@ local GEAR_SLOT_POSITIONS = {
 
 function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY)
     local visualFrame = CreateFrame("Frame", nil, parent)
-    visualFrame:SetSize(140, 350) -- Size for gear layout
+    visualFrame:SetSize(140, 600) -- Increased height for vertical layout
     visualFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", offsetX or 0, offsetY or -40)
 
     -- Create item map for easy lookup
