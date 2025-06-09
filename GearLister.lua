@@ -151,6 +151,10 @@ function GearLister:GetEquippedItems(unit)
                 local itemEntry = slotName .. ": " .. itemLink .. actualDelimiter .. wowheadLink
                 table.insert(items, itemEntry)
             end
+        else
+            -- Always include slot even if empty
+            local itemEntry = slotName .. ": (empty)"
+            table.insert(items, itemEntry)
         end
     end
 
@@ -196,6 +200,7 @@ function GearLister:SaveToHistory(characterName, items)
         table.remove(gearHistory)
     end
 
+    -- Force immediate history list refresh
     self:RefreshHistoryList()
 end
 
@@ -406,12 +411,12 @@ function GearLister:ShowMainWindow()
     settingsButton.frame:SetPoint("LEFT", refreshButton.frame, "RIGHT", 10, 0)
     container:AddChild(settingsButton)
 
-    -- Credit text with version
+    -- Credit text with version - right aligned with buttons
     local creditText = AceGUI:Create("Label")
     local version = self.version or "Unknown"
     creditText:SetText("|cff808080Made with <3 by Bunnycrits (v" .. version .. ")|r")
-    creditText:SetWidth(200)
-    creditText.frame:SetPoint("BOTTOM", container.frame, "BOTTOM", 0, -5)
+    creditText:SetWidth(300)
+    creditText.frame:SetPoint("BOTTOMRIGHT", container.frame, "BOTTOMRIGHT", -20, 10) -- Same height as buttons
     container:AddChild(creditText)
 
     -- Initialize display
@@ -515,7 +520,7 @@ function GearLister:RefreshHistoryList()
     if comparisonMode then
         local instructionLabel = AceGUI:Create("Label")
         instructionLabel:SetText(
-        "|cffff9900Click entries to select:\n[A] First character (green)\n[B] Second character (blue)|r")
+            "|cffff9900Click entries to select:\n[A] First character (green)\n[B] Second character (blue)|r")
         instructionLabel:SetFullWidth(true)
         mainFrame.historyList:AddChild(instructionLabel)
     end
@@ -564,8 +569,11 @@ function GearLister:RefreshGearDisplay()
                 end
 
                 if containerFrame then
-                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(containerFrame, entryA.items, 250, -100)
-                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(containerFrame, entryB.items, 450, -100)
+                    -- Pass comparison data to highlight differences
+                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(containerFrame, entryA.items, 250, -100,
+                        entryB.items)
+                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(containerFrame, entryB.items, 450, -100,
+                        entryA.items)
 
                     -- Add character labels
                     local labelA = mainFrame.visualDisplayA:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -576,13 +584,18 @@ function GearLister:RefreshGearDisplay()
                     labelB:SetPoint("TOP", mainFrame.visualDisplayB, "TOP", 0, 20)
                     labelB:SetText("|cff0099ff" .. entryB.characterName .. "|r")
 
+                    -- Add legend at the bottom
+                    local legend = containerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                    legend:SetPoint("BOTTOM", containerFrame, "BOTTOM", 0, 60) -- Positioned above buttons
+                    legend:SetText("|cff808080Grey: Same Items|r")
+
                     titleSuffix = " - Visual Comparison: " .. entryA.characterName .. " vs " .. entryB.characterName
                 else
                     -- Fallback to text mode if container not found
                     if mainFrame.gearEditBox then
                         mainFrame.gearEditBox.frame:Show()
                         mainFrame.gearEditBox:SetText("Visual comparison mode error - using text fallback:\n\n" ..
-                        self:CompareGearSets(entryA, entryB))
+                            self:CompareGearSets(entryA, entryB))
                     end
                 end
             end
@@ -680,12 +693,12 @@ function GearLister:RefreshGearDisplay()
                     local gearHistory = self.db.profile.gearHistory
                     if gearHistory[comparisonIndexA] then
                         gearText = gearText ..
-                        "First character selected: " .. gearHistory[comparisonIndexA].characterName .. "\n"
+                            "First character selected: " .. gearHistory[comparisonIndexA].characterName .. "\n"
                         gearText = gearText .. "Now select a second character to compare."
                     end
                 else
                     gearText = gearText ..
-                    "Click on a character in the history list to select them as the first character for comparison."
+                        "Click on a character in the history list to select them as the first character for comparison."
                 end
             end
             titleSuffix = " - Comparison Mode"
@@ -719,8 +732,8 @@ function GearLister:RefreshGearDisplay()
             local items = self:GetEquippedItems(targetUnit)
             gearText = table.concat(items, "\n")
 
-            -- Auto-save current gear to history (but not in comparison mode)
-            if characterName and not comparisonMode then
+            -- Auto-save current gear to history (always save when not in comparison mode)
+            if characterName then
                 self:SaveToHistory(characterName, items)
             end
         end
@@ -740,28 +753,28 @@ end
 
 -- Visual gear display layout (like character pane)
 local GEAR_SLOT_POSITIONS = {
-    [1] = { x = 50, y = -50 }, -- Head
-    [2] = { x = 50, y = -90 }, -- Neck
-    [3] = { x = 10, y = -50 }, -- Shoulders
-    [15] = { x = 10, y = -90 }, -- Back
-    [5] = { x = 50, y = -130 }, -- Chest
-    [9] = { x = 10, y = -130 }, -- Wrist
+    [1] = { x = 50, y = -50 },   -- Head
+    [2] = { x = 50, y = -90 },   -- Neck
+    [3] = { x = 10, y = -50 },   -- Shoulders
+    [15] = { x = 10, y = -90 },  -- Back
+    [5] = { x = 50, y = -130 },  -- Chest
+    [9] = { x = 10, y = -130 },  -- Wrist
     [10] = { x = 50, y = -170 }, -- Gloves
-    [6] = { x = 50, y = -210 }, -- Belt
-    [7] = { x = 50, y = -250 }, -- Legs
-    [8] = { x = 50, y = -290 }, -- Feet
+    [6] = { x = 50, y = -210 },  -- Belt
+    [7] = { x = 50, y = -250 },  -- Legs
+    [8] = { x = 50, y = -290 },  -- Feet
     [11] = { x = 90, y = -170 }, -- Ring1
     [12] = { x = 90, y = -210 }, -- Ring2
-    [13] = { x = 90, y = -50 }, -- Trinket1
-    [14] = { x = 90, y = -90 }, -- Trinket2
+    [13] = { x = 90, y = -50 },  -- Trinket1
+    [14] = { x = 90, y = -90 },  -- Trinket2
     [16] = { x = 10, y = -250 }, -- Main Hand
     [17] = { x = 90, y = -250 }, -- Off Hand
-    [18] = { x = 90, y = -130 } -- Ranged
+    [18] = { x = 90, y = -130 }  -- Ranged
 }
 
-function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY)
+function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, comparisonItems)
     local visualFrame = CreateFrame("Frame", nil, parent)
-    visualFrame:SetSize(140, 600) -- Increased height for vertical layout
+    visualFrame:SetSize(160, 420) -- Increased height for extra row
     visualFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", offsetX or 0, offsetY or -40)
 
     -- Create item map for easy lookup
@@ -773,79 +786,147 @@ function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY)
         end
     end
 
-    -- Create gear slot buttons
+    -- Create comparison item map if provided
+    local comparisonMap = {}
+    if comparisonItems then
+        for _, item in ipairs(comparisonItems) do
+            local slot = string.match(item, "^([^:]+):")
+            if slot then
+                comparisonMap[slot] = item
+            end
+        end
+    end
+
+    -- Create gear slot buttons in the exact order from DISPLAY_ORDER
     local gearButtons = {}
-    for _, slotInfo in ipairs(DISPLAY_ORDER) do
+    for i, slotInfo in ipairs(DISPLAY_ORDER) do
         local slotId = slotInfo.slot
         local slotName = slotInfo.name
-        local pos = GEAR_SLOT_POSITIONS[slotId]
 
-        if pos then
-            local button = CreateFrame("Button", nil, visualFrame)
-            button:SetSize(32, 32)
-            button:SetPoint("TOPLEFT", visualFrame, "TOPLEFT", pos.x, pos.y)
+        -- Calculate position based on order index (i) but skip a slot after Trinket 2
+        local displayIndex = i
+        if i > 13 then -- After Trinket 2 (13th item), add one to skip a slot
+            displayIndex = i + 1
+        end
 
-            -- Create border
-            button.border = button:CreateTexture(nil, "BACKGROUND")
-            button.border:SetAllPoints()
-            button.border:SetTexture("Interface\\Buttons\\UI-EmptySlot")
+        local row = math.ceil(displayIndex / 3) - 1 -- 0-based row (3 items per row)
+        local col = ((displayIndex - 1) % 3)        -- 0-based column
+        local x = 10 + (col * 46)                   -- Increased from 40 to 46px (15% increase)
+        local y = -50 - (row * 46)                  -- Increased from 40 to 46px (15% increase)
 
-            -- Create icon texture
-            button.icon = button:CreateTexture(nil, "ARTWORK")
-            button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
-            button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
+        local button = CreateFrame("Button", nil, visualFrame)
+        button:SetSize(38, 38) -- Increased from 32 to 38px (20% increase)
+        button:SetPoint("TOPLEFT", visualFrame, "TOPLEFT", x, y)
 
-            -- Get item for this slot
-            local itemData = itemMap[slotName]
-            if itemData then
-                -- Extract item link from the saved data - look for item link pattern
-                local itemLink = string.match(itemData, "(|c%x+|Hitem:[^|]+|h[^|]+|h|r)")
-                if itemLink then
-                    local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemLink)
-                    if texture then
-                        button.icon:SetTexture(texture)
-                        button.border:SetTexture("Interface\\Buttons\\UI-Slot-Background")
+        -- Create border
+        button.border = button:CreateTexture(nil, "BACKGROUND")
+        button.border:SetAllPoints()
+        button.border:SetTexture("Interface\\Buttons\\UI-EmptySlot")
 
-                        -- Set up tooltip
-                        button.itemLink = itemLink
-                        button:SetScript("OnEnter", function(self)
-                            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                            GameTooltip:SetHyperlink(self.itemLink)
-                            GameTooltip:Show()
-                        end)
-                        button:SetScript("OnLeave", function(self)
-                            GameTooltip:Hide()
-                        end)
+        -- Create icon texture
+        button.icon = button:CreateTexture(nil, "ARTWORK")
+        button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
+        button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
+
+        -- Create difference indicator overlay
+        button.diffIndicator = button:CreateTexture(nil, "OVERLAY")
+        button.diffIndicator:SetAllPoints()
+        button.diffIndicator:Hide() -- Hidden by default
+
+        -- Get item for this slot
+        local itemData = itemMap[slotName]
+        local comparisonData = comparisonMap[slotName]
+        local isMatching = false
+        local isDifferent = false
+        local isMissing = false
+
+        -- Determine comparison status
+        if comparisonItems then
+            if itemData and comparisonData then
+                -- Both have items - compare them
+                local itemLinkA = string.match(itemData, "(|c%x+|Hitem:[^|]+|h[^|]+|h|r)")
+                local itemLinkB = string.match(comparisonData, "(|c%x+|Hitem:[^|]+|h[^|]+|h|r)")
+
+                if itemLinkA and itemLinkB then
+                    local nameA = string.match(itemLinkA, "|h([^|]+)|h")
+                    local nameB = string.match(itemLinkB, "|h([^|]+)|h")
+                    isMatching = (nameA == nameB)
+                    isDifferent = not isMatching
+                end
+            elseif itemData and not comparisonData then
+                -- This character has item, other doesn't
+                isMissing = true
+            elseif not itemData and comparisonData then
+                -- Other character has item, this one doesn't
+                isMissing = true
+            elseif not itemData and not comparisonData then
+                -- Both empty - considered matching
+                isMatching = true
+            end
+        end
+
+        if itemData then
+            -- Extract item link from the saved data - look for item link pattern
+            local itemLink = string.match(itemData, "(|c%x+|Hitem:[^|]+|h[^|]+|h|r)")
+            if itemLink then
+                local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemLink)
+                if texture then
+                    button.icon:SetTexture(texture)
+                    button.border:SetTexture("Interface\\Buttons\\UI-Slot-Background")
+
+                    -- Apply comparison visual effects
+                    if isMatching then
+                        -- Grey out matching items
+                        button.icon:SetDesaturated(true)
+                        button.icon:SetVertexColor(0.5, 0.5, 0.5, 0.8)
                     else
-                        -- Item not cached yet, show placeholder and try to load
-                        button.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
-                        -- Try to load the item info
-                        local itemString = string.match(itemLink, "item:([^|]+)")
-                        if itemString then
-                            local itemID = string.match(itemString, "^(%d+)")
-                            if itemID then
-                                -- Force item loading
-                                GetItemInfo(tonumber(itemID))
-                            end
+                        -- Keep different items normal (no special highlighting)
+                        button.icon:SetDesaturated(false)
+                        button.icon:SetVertexColor(1, 1, 1, 1)
+                    end
+
+                    -- Set up tooltip
+                    button.itemLink = itemLink
+                    button:SetScript("OnEnter", function(self)
+                        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                        GameTooltip:SetHyperlink(self.itemLink)
+                        GameTooltip:Show()
+                    end)
+                    button:SetScript("OnLeave", function(self)
+                        GameTooltip:Hide()
+                    end)
+                else
+                    -- Item not cached yet, show placeholder and try to load
+                    button.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+                    -- Try to load the item info
+                    local itemString = string.match(itemLink, "item:([^|]+)")
+                    if itemString then
+                        local itemID = string.match(itemString, "^(%d+)")
+                        if itemID then
+                            -- Force item loading
+                            GetItemInfo(tonumber(itemID))
                         end
                     end
-                else
-                    -- No item link found, show empty slot
-                    button.icon:SetTexture(nil)
                 end
             else
-                -- Empty slot
+                -- No item link found, show empty slot
                 button.icon:SetTexture(nil)
             end
+        else
+            -- Empty slot - show empty box
+            button.icon:SetTexture(nil)
+            button.border:SetTexture("Interface\\Buttons\\UI-EmptySlot")
 
-            -- Add slot label
-            button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            button.label:SetPoint("BOTTOM", button, "TOP", 0, 2)
-            button.label:SetText(slotName)
-            button.label:SetTextColor(0.8, 0.8, 0.8)
-
-            gearButtons[slotId] = button
+            -- No special effects for empty slots in comparison mode
         end
+
+        -- Add slot label positioned above the icon
+        button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        button.label:SetPoint("BOTTOM", button, "TOP", 0, 2)
+        button.label:SetText(slotName)
+        button.label:SetTextColor(0.8, 0.8, 0.8)
+
+        gearButtons[slotId] = button
     end
 
     return visualFrame, gearButtons
@@ -917,7 +998,7 @@ end
 function GearLister:CompareGearSets(entryA, entryB)
     local comparisonText = "|cffffff00=== GEAR COMPARISON ===|r\n"
     comparisonText = comparisonText ..
-    "|cff00ff00" .. entryA.characterName .. "|r vs |cff0099ff" .. entryB.characterName .. "|r\n\n"
+        "|cff00ff00" .. entryA.characterName .. "|r vs |cff0099ff" .. entryB.characterName .. "|r\n\n"
 
     -- Create item maps for easier comparison
     local itemsA = {}
@@ -1035,6 +1116,9 @@ function GearLister:RefreshCurrentGear()
         self:RefreshGearDisplay()
     else
         -- Reset state and re-determine target mode (like a fresh /gear call)
+        local oldInspectMode = inspectMode
+        local oldInspectTarget = inspectTarget
+
         inspectMode = false
         inspectTarget = nil
         currentHistoryIndex = nil
@@ -1047,6 +1131,7 @@ function GearLister:RefreshCurrentGear()
                 local characterName = UnitName("player")
                 local items = self:GetEquippedItems("player")
                 self:SaveToHistory(characterName, items)
+                -- Force complete UI refresh
                 self:RefreshMainWindow()
                 self:Print("|cff00ff00Inspected and saved gear for " .. characterName .. "|r")
             else
@@ -1206,7 +1291,7 @@ function GearLister:UpdateSettingsExample()
     end
 
     local exampleText = "|cff808080Example: Head: Lionheart Helm" ..
-    actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
+        actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
     settingsFrame.exampleLabel:SetText(exampleText)
 end
 
