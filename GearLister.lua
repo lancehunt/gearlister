@@ -78,7 +78,7 @@ local currentHistoryIndex = nil
 local comparisonMode = false
 local comparisonIndexA = nil
 local comparisonIndexB = nil
-local visualMode = false -- New: toggle between text list and visual icons
+local visualMode = true -- Changed default to true (Visual Mode is default)
 
 function GearLister:OnInitialize()
     -- Get version from TOC file
@@ -289,7 +289,7 @@ function GearLister:ShowMainWindow()
 
     -- Create main window
     mainFrame = AceGUI:Create("Frame")
-    mainFrame:SetTitle("GearLister - Equipped Gear with Wowhead Links")
+    mainFrame:SetTitle("GearList")
     mainFrame:SetWidth(900)
     mainFrame:SetHeight(650)
     mainFrame:SetLayout("Fill")
@@ -367,17 +367,17 @@ function GearLister:ShowMainWindow()
     container:AddChild(comparisonToggle)
     mainFrame.comparisonToggle = comparisonToggle
 
-    -- Visual mode toggle
-    local visualToggle = AceGUI:Create("CheckBox")
-    visualToggle:SetLabel("Visual Mode")
-    visualToggle:SetValue(visualMode)
-    visualToggle:SetWidth(120)
-    visualToggle:SetCallback("OnValueChanged", function(widget, event, value)
-        self:ToggleVisualMode(value)
+    -- Text mode toggle (inverted from visual mode)
+    local textToggle = AceGUI:Create("CheckBox")
+    textToggle:SetLabel("Text Mode")
+    textToggle:SetValue(not visualMode) -- Inverted: checked when visual mode is false
+    textToggle:SetWidth(120)
+    textToggle:SetCallback("OnValueChanged", function(widget, event, value)
+        self:ToggleVisualMode(not value) -- Invert the value since this is "Text Mode"
     end)
-    visualToggle.frame:SetPoint("TOPRIGHT", container.frame, "TOPRIGHT", -170, -10)
-    container:AddChild(visualToggle)
-    mainFrame.visualToggle = visualToggle
+    textToggle.frame:SetPoint("TOPRIGHT", container.frame, "TOPRIGHT", -170, -10)
+    container:AddChild(textToggle)
+    mainFrame.textToggle = textToggle
 
     -- Gear display (will be split in comparison mode)
     local gearEditBox = AceGUI:Create("MultiLineEditBox")
@@ -520,7 +520,7 @@ function GearLister:RefreshHistoryList()
     if comparisonMode then
         local instructionLabel = AceGUI:Create("Label")
         instructionLabel:SetText(
-            "|cffff9900Click entries to select:\n[A] First character (green)\n[B] Second character (blue)|r")
+        "|cffff9900Click entries to select:\n[A] First character (green)\n[B] Second character (blue)|r")
         instructionLabel:SetFullWidth(true)
         mainFrame.historyList:AddChild(instructionLabel)
     end
@@ -595,7 +595,7 @@ function GearLister:RefreshGearDisplay()
                     if mainFrame.gearEditBox then
                         mainFrame.gearEditBox.frame:Show()
                         mainFrame.gearEditBox:SetText("Visual comparison mode error - using text fallback:\n\n" ..
-                            self:CompareGearSets(entryA, entryB))
+                        self:CompareGearSets(entryA, entryB))
                     end
                 end
             end
@@ -693,12 +693,12 @@ function GearLister:RefreshGearDisplay()
                     local gearHistory = self.db.profile.gearHistory
                     if gearHistory[comparisonIndexA] then
                         gearText = gearText ..
-                            "First character selected: " .. gearHistory[comparisonIndexA].characterName .. "\n"
+                        "First character selected: " .. gearHistory[comparisonIndexA].characterName .. "\n"
                         gearText = gearText .. "Now select a second character to compare."
                     end
                 else
                     gearText = gearText ..
-                        "Click on a character in the history list to select them as the first character for comparison."
+                    "Click on a character in the history list to select them as the first character for comparison."
                 end
             end
             titleSuffix = " - Comparison Mode"
@@ -743,7 +743,7 @@ function GearLister:RefreshGearDisplay()
         end
     end
 
-    mainFrame:SetTitle("GearLister - Equipped Gear with Wowhead Links" .. titleSuffix)
+    mainFrame:SetTitle("GearList" .. titleSuffix)
 end
 
 function GearLister:SelectCurrentGear()
@@ -753,23 +753,23 @@ end
 
 -- Visual gear display layout (like character pane)
 local GEAR_SLOT_POSITIONS = {
-    [1] = { x = 50, y = -50 },   -- Head
-    [2] = { x = 50, y = -90 },   -- Neck
-    [3] = { x = 10, y = -50 },   -- Shoulders
-    [15] = { x = 10, y = -90 },  -- Back
-    [5] = { x = 50, y = -130 },  -- Chest
-    [9] = { x = 10, y = -130 },  -- Wrist
+    [1] = { x = 50, y = -50 }, -- Head
+    [2] = { x = 50, y = -90 }, -- Neck
+    [3] = { x = 10, y = -50 }, -- Shoulders
+    [15] = { x = 10, y = -90 }, -- Back
+    [5] = { x = 50, y = -130 }, -- Chest
+    [9] = { x = 10, y = -130 }, -- Wrist
     [10] = { x = 50, y = -170 }, -- Gloves
-    [6] = { x = 50, y = -210 },  -- Belt
-    [7] = { x = 50, y = -250 },  -- Legs
-    [8] = { x = 50, y = -290 },  -- Feet
+    [6] = { x = 50, y = -210 }, -- Belt
+    [7] = { x = 50, y = -250 }, -- Legs
+    [8] = { x = 50, y = -290 }, -- Feet
     [11] = { x = 90, y = -170 }, -- Ring1
     [12] = { x = 90, y = -210 }, -- Ring2
-    [13] = { x = 90, y = -50 },  -- Trinket1
-    [14] = { x = 90, y = -90 },  -- Trinket2
+    [13] = { x = 90, y = -50 }, -- Trinket1
+    [14] = { x = 90, y = -90 }, -- Trinket2
     [16] = { x = 10, y = -250 }, -- Main Hand
     [17] = { x = 90, y = -250 }, -- Off Hand
-    [18] = { x = 90, y = -130 }  -- Ranged
+    [18] = { x = 90, y = -130 } -- Ranged
 }
 
 function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, comparisonItems)
@@ -935,10 +935,15 @@ end
 function GearLister:ToggleVisualMode(enabled)
     visualMode = enabled
 
+    -- Update the text mode checkbox to reflect the opposite of visual mode
+    if mainFrame and mainFrame.textToggle then
+        mainFrame.textToggle:SetValue(not enabled)
+    end
+
     if enabled then
         self:Print("|cff00ff00Visual Mode enabled - showing gear as icons.|r")
     else
-        self:Print("|cff00ff00Visual Mode disabled - showing text list.|r")
+        self:Print("|cff00ff00Text Mode enabled - showing text list.|r")
     end
 
     self:RefreshGearDisplay()
@@ -998,7 +1003,7 @@ end
 function GearLister:CompareGearSets(entryA, entryB)
     local comparisonText = "|cffffff00=== GEAR COMPARISON ===|r\n"
     comparisonText = comparisonText ..
-        "|cff00ff00" .. entryA.characterName .. "|r vs |cff0099ff" .. entryB.characterName .. "|r\n\n"
+    "|cff00ff00" .. entryA.characterName .. "|r vs |cff0099ff" .. entryB.characterName .. "|r\n\n"
 
     -- Create item maps for easier comparison
     local itemsA = {}
@@ -1291,7 +1296,7 @@ function GearLister:UpdateSettingsExample()
     end
 
     local exampleText = "|cff808080Example: Head: Lionheart Helm" ..
-        actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
+    actualDelimiter .. "https://classic.wowhead.com/item/12640|r"
     settingsFrame.exampleLabel:SetText(exampleText)
 end
 
