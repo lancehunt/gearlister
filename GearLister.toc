@@ -2,12 +2,13 @@
 ## Title: GearLister
 ## Notes: Shows equipped gear in a copyable dialog with integrated history panel and Wowhead links
 ## Author: Bunnycrits
-## Version: 4.9.2
+## Version: 4.9.3
 ## SavedVariables: GearListerDB
 ## OptionalDeps: Ace3
 
 # Ace3 Libraries
 Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
 Libs\AceAddon-3.0\AceAddon-3.0.xml
 Libs\AceConsole-3.0\AceConsole-3.0.xml
 Libs\AceEvent-3.0\AceEvent-3.0.xml
