@@ -2,16 +2,42 @@
 -- Shows equipped gear in a copyable dialog with integrated history panel
 -- Uses Ace3 libraries for modern UI and data management
 
-local AceAddon = LibStub("AceAddon-3.0")
-local AceGUI = LibStub("AceGUI-3.0")
-local AceDB = LibStub("AceDB-3.0")
+-- Protected library loading to prevent initialization failures
+local function SafeLibStub(lib)
+    local success, result = pcall(LibStub, lib)
+    if success then
+        return result
+    else
+        print("GearLister: Failed to load " .. lib .. " - " .. tostring(result))
+        return nil
+    end
+end
+
+local AceAddon = SafeLibStub("AceAddon-3.0")
+local AceGUI = SafeLibStub("AceGUI-3.0")
+local AceDB = SafeLibStub("AceDB-3.0")
+
+-- Check if all required libraries loaded successfully
+if not AceAddon or not AceGUI or not AceDB then
+    print("GearLister: Required libraries failed to load. Please restart WoW or reinstall the addon.")
+    return
+end
 
 -- Prevent duplicate addon creation
 if AceAddon:GetAddon("GearLister", true) then
     return
 end
 
-local GearLister = AceAddon:NewAddon("GearLister", "AceConsole-3.0", "AceEvent-3.0")
+-- Protected addon creation
+local GearLister
+local success, error = pcall(function()
+    GearLister = AceAddon:NewAddon("GearLister", "AceConsole-3.0", "AceEvent-3.0")
+end)
+
+if not success then
+    print("GearLister: Failed to create addon - " .. tostring(error))
+    return
+end
 
 -- Default database structure
 local defaults = {
@@ -81,19 +107,27 @@ local comparisonIndexB = nil
 local visualMode = true -- Changed default to true (Visual Mode is default)
 
 function GearLister:OnInitialize()
-    -- Get version from TOC file
-    local version = GetAddOnMetadata("GearLister", "Version") or "Unknown"
-    self.version = version
+    -- Protected initialization with error handling
+    local success, error = pcall(function()
+        -- Get version from TOC file
+        local version = GetAddOnMetadata("GearLister", "Version") or "Unknown"
+        self.version = version
 
-    -- Initialize database
-    self.db = AceDB:New("GearListerDB", defaults, true)
+        -- Initialize database
+        self.db = AceDB:New("GearListerDB", defaults, true)
 
-    -- Register slash commands
-    self:RegisterChatCommand("gear", "SlashProcessor")
-    self:RegisterChatCommand("gearlist", "SlashProcessor")
+        -- Register slash commands
+        self:RegisterChatCommand("gear", "SlashProcessor")
+        self:RegisterChatCommand("gearlist", "SlashProcessor")
 
-    -- Register events
-    self:RegisterEvent("INSPECT_READY", "OnInspectReady")
+        -- Register events
+        self:RegisterEvent("INSPECT_READY", "OnInspectReady")
+    end)
+
+    if not success then
+        print("GearLister: Initialization failed - " .. tostring(error))
+        return
+    end
 
     self:Print("GearLister loaded! Use /gear or /gearlist to show equipped items with Wowhead links.")
     self:Print("Use /gear inspect to inspect your target's gear.")
@@ -287,8 +321,10 @@ function GearLister:ShowMainWindow()
         return
     end
 
-    -- Create main window - reduced height by 20% (650 -> 520) and prevent resizing
-    mainFrame = AceGUI:Create("Frame")
+    -- Protected UI creation with error handling
+    local success, error = pcall(function()
+        -- Create main window - reduced height by 20% (650 -> 520) and prevent resizing
+        mainFrame = AceGUI:Create("Frame")
     mainFrame:SetTitle("GearList")
     mainFrame:SetWidth(900)
     mainFrame:SetHeight(520)
@@ -422,6 +458,12 @@ function GearLister:ShowMainWindow()
 
     -- Initialize display
     self:RefreshMainWindow()
+    end)
+
+    if not success then
+        print("GearLister: UI creation failed - " .. tostring(error))
+        return
+    end
 end
 
 function GearLister:RefreshMainWindow()
@@ -1164,7 +1206,9 @@ function GearLister:ShowSettingsWindow()
         return
     end
 
-    settingsFrame = AceGUI:Create("Frame")
+    -- Protected settings window creation
+    local success, error = pcall(function()
+        settingsFrame = AceGUI:Create("Frame")
     settingsFrame:SetTitle("GearLister Settings")
     settingsFrame:SetWidth(400)
     settingsFrame:SetHeight(350)
@@ -1283,6 +1327,12 @@ function GearLister:ShowSettingsWindow()
         self:UpdateSettingsExample()
     end)
     buttonGroup:AddChild(resetButton)
+    end)
+
+    if not success then
+        print("GearLister: Settings window creation failed - " .. tostring(error))
+        return
+    end
 end
 
 function GearLister:UpdateSettingsExample()
@@ -1334,6 +1384,11 @@ end
 
 -- Slash Command Handler
 function GearLister:SlashProcessor(input)
+    -- Safety check to ensure addon is fully loaded
+    if not self.db then
+        self:Print("|cffff0000GearLister is not fully loaded yet. Please try again in a moment.|r")
+        return
+    end
     local command = string.lower(string.trim(input or ""))
 
     if command == "inspect" then
