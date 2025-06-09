@@ -287,12 +287,13 @@ function GearLister:ShowMainWindow()
         return
     end
 
-    -- Create main window - reduced height by 20% (650 -> 520)
+    -- Create main window - reduced height by 20% (650 -> 520) and prevent resizing
     mainFrame = AceGUI:Create("Frame")
     mainFrame:SetTitle("GearList")
     mainFrame:SetWidth(900)
     mainFrame:SetHeight(520)
     mainFrame:SetLayout("Fill")
+    mainFrame.frame:SetResizable(false) -- Prevent resizing
     mainFrame:SetCallback("OnClose", function(widget)
         inspectMode = false
         inspectTarget = nil
@@ -315,10 +316,10 @@ function GearLister:ShowMainWindow()
     historyLabel.frame:SetPoint("TOPLEFT", container.frame, "TOPLEFT", 10, -10)
     container:AddChild(historyLabel)
 
-    -- History list - reduced height by 20% (500 -> 400)
+    -- History list - reduced height proportionally (500 -> 370)
     local historyList = AceGUI:Create("ScrollFrame")
     historyList:SetWidth(200)
-    historyList:SetHeight(400)
+    historyList:SetHeight(370)
     historyList:SetLayout("List")
     historyList.frame:SetPoint("TOPLEFT", historyLabel.frame, "BOTTOMLEFT", 0, -5)
     container:AddChild(historyList)
@@ -379,10 +380,10 @@ function GearLister:ShowMainWindow()
     container:AddChild(textToggle)
     mainFrame.textToggle = textToggle
 
-    -- Gear display - reduced height by 20% (420 -> 336)
+    -- Gear display - reduced height proportionally (420 -> 310)
     local gearEditBox = AceGUI:Create("MultiLineEditBox")
     gearEditBox:SetWidth(600)
-    gearEditBox:SetHeight(336)
+    gearEditBox:SetHeight(310)
     gearEditBox:DisableButton(true)
     gearEditBox.frame:SetPoint("TOPLEFT", gearLabel.frame, "BOTTOMLEFT", 0, -5)
     gearEditBox.frame:SetPoint("BOTTOMRIGHT", container.frame, "BOTTOMRIGHT", -20, 50) -- Anchor to bottom
@@ -586,7 +587,7 @@ function GearLister:RefreshGearDisplay()
 
                     -- Add legend at the bottom
                     local legend = containerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                    legend:SetPoint("BOTTOM", containerFrame, "BOTTOM", 0, 60) -- Positioned above buttons
+                    legend:SetPoint("BOTTOM", containerFrame, "BOTTOM", 0, 65) -- Positioned above buttons with more clearance
                     legend:SetText("|cff808080Grey: Same Items|r")
 
                     titleSuffix = " - Visual Comparison: " .. entryA.characterName .. " vs " .. entryB.characterName
@@ -774,7 +775,7 @@ local GEAR_SLOT_POSITIONS = {
 
 function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, comparisonItems)
     local visualFrame = CreateFrame("Frame", nil, parent)
-    visualFrame:SetSize(160, 420) -- Increased height for extra row
+    visualFrame:SetSize(160, 330) -- Reduced height to fit in smaller window
     visualFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", offsetX or 0, offsetY or -40)
 
     -- Create item map for easy lookup
