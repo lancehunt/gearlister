@@ -1,5 +1,10 @@
 name: Build and Release GearLister
 
+permissions:
+  contents: write
+  actions: read
+  packages: write
+
 on:
   push:
     branches:
@@ -96,12 +101,16 @@ jobs:
       if: |
         (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
         (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true' && steps.get_version.outputs.branch_name == 'main')
-      uses: softprops/action-gh-release@v1
+        (github.event_name == 'workflow_dispatch' && 
+         github.event.inputs.create_release == 'true' && 
+         steps.get_version.outputs.branch_name == 'main')
+      uses: softprops/action-gh-release@v2
       with:
         files: build/${{ steps.get_version.outputs.package_name }}.zip
         name: GearLister ${{ steps.get_version.outputs.version }}
         tag_name: ${{ steps.get_version.outputs.version }}
+        make_latest: ${{ steps.get_version.outputs.branch_name == 'main' }}
+        generate_release_notes: true
         body: |
           ## GearLister ${{ steps.get_version.outputs.version }}
           
@@ -109,7 +118,7 @@ jobs:
           
           ### Installation Instructions:
           1. Download the zip file below
-          2. Extract to your `World of Warcraft/_classic_era_/Interface/AddOns/` directory
+          2. Extract to your `World of Warcraft/_classic_era_/Interface/AddOns/`
           3. Restart WoW Classic
           4. Type `/gear` in game to use!
           
@@ -120,5 +129,3 @@ jobs:
           **Build Trigger**: ${{ github.event_name }}
         draft: false
         prerelease: ${{ steps.get_version.outputs.branch_name != 'main' }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
