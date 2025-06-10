@@ -1,0 +1,124 @@
+name: Build and Release GearLister
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v4.10.1)'
+        required: false
+        default: 'auto'
+      create_release:
+        description: 'Create GitHub release (only works on main branch)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Get version and branch info
+      id: get_version
+      run: |
+        # Get branch name
+        if [ "${{ github.event_name }}" = "push" ]; then
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            BRANCH_NAME="main"
+          fi
+        else
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        fi
+        
+        # Get version
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          # Tagged release
+          VERSION=${GITHUB_REF#refs/tags/}
+          PACKAGE_NAME="GearLister-${VERSION}"
+        elif [ "${{ github.event.inputs.version }}" != "auto" ] && [ "${{ github.event.inputs.version }}" != "" ]; then
+          # Manual version specified
+          VERSION=${{ github.event.inputs.version }}
+          if [ "$BRANCH_NAME" != "main" ]; then
+            PACKAGE_NAME="GearLister-${VERSION}-${BRANCH_NAME}"
+          else
+            PACKAGE_NAME="GearLister-${VERSION}"
+          fi
+        else
+          # Auto-detect from TOC file
+          TOC_VERSION=$(grep "## Version:" GearLister.toc | cut -d' ' -f3)
+          if [ "$BRANCH_NAME" != "main" ]; then
+            PACKAGE_NAME="GearLister-v${TOC_VERSION}-${BRANCH_NAME}"
+            VERSION="v${TOC_VERSION}-${BRANCH_NAME}"
+          else
+            PACKAGE_NAME="GearLister-v${TOC_VERSION}"
+            VERSION="v${TOC_VERSION}"
+          fi
+        fi
+        
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "package_name=${PACKAGE_NAME}" >> $GITHUB_OUTPUT
+        echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+        echo "Building version: ${VERSION} from branch: ${BRANCH_NAME}"
+        echo "Package name: ${PACKAGE_NAME}"
+        
+    - name: Create addon package
+      run: |
+        # Create build directory
+        mkdir -p build/GearLister
+        
+        # Copy addon files (exclude git, github, and backup files)
+        rsync -av --exclude='.git*' --exclude='*.bak' --exclude='debug_test.lua*' --exclude='build/' . build/GearLister/
+        
+        # Create zip file with branch-aware naming
+        cd build
+        zip -r "${{ steps.get_version.outputs.package_name }}.zip" GearLister/
+        
+        # Verify contents
+        echo "=== Package Contents ==="
+        unzip -l "${{ steps.get_version.outputs.package_name }}.zip"
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.get_version.outputs.package_name }}
+        path: build/${{ steps.get_version.outputs.package_name }}.zip
+        
+    - name: Create Release
+      if: |
+        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true' && steps.get_version.outputs.branch_name == 'main')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/${{ steps.get_version.outputs.package_name }}.zip
+        name: GearLister ${{ steps.get_version.outputs.version }}
+        tag_name: ${{ steps.get_version.outputs.version }}
+        body: |
+          ## GearLister ${{ steps.get_version.outputs.version }}
+          
+          Ready-to-install addon package for World of Warcraft Classic.
+          
+          ### Installation Instructions:
+          1. Download the zip file below
+          2. Extract to your `World of Warcraft/_classic_era_/Interface/AddOns/` directory
+          3. Restart WoW Classic
+          4. Type `/gear` in game to use!
+          
+          ### What's New:
+          See commit history for detailed changes in this release.
+          
+          **Branch**: ${{ steps.get_version.outputs.branch_name }}  
+          **Build Trigger**: ${{ github.event_name }}
+        draft: false
+        prerelease: ${{ steps.get_version.outputs.branch_name != 'main' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

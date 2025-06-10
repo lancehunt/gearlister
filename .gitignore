@@ -1,0 +1,26 @@
+# WoW SavedVariables
+SavedVariables/
+
+# Backup files
+*.bak
+*~
+
+# Debug files
+debug_test.lua*
+
+# Build artifacts
+build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
