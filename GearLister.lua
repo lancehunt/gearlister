@@ -335,9 +335,13 @@ function GearLister:ShowMainWindow()
     mainFrame.frame:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then
             mainFrame:Hide()
+            -- Stop propagation to prevent WoW main menu from opening
+            return
         end
+        -- Allow other keys to propagate normally
+        self:SetPropagateKeyboardInput(true)
     end)
-    mainFrame.frame:SetPropagateKeyboardInput(true)
+    mainFrame.frame:SetPropagateKeyboardInput(false) -- Default to false, enable per-key
     mainFrame.frame:EnableKeyboard(true)
     
     -- Enhanced close callback with proper cleanup
@@ -1234,9 +1238,13 @@ function GearLister:ShowSettingsWindow()
     settingsFrame.frame:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then
             settingsFrame:Hide()
+            -- Stop propagation to prevent WoW main menu from opening
+            return
         end
+        -- Allow other keys to propagate normally
+        self:SetPropagateKeyboardInput(true)
     end)
-    settingsFrame.frame:SetPropagateKeyboardInput(true)
+    settingsFrame.frame:SetPropagateKeyboardInput(false) -- Default to false, enable per-key
     settingsFrame.frame:EnableKeyboard(true)
 
     -- Create a solid black background
