@@ -87,9 +87,34 @@ jobs:
         cd build
         zip -r "${{ steps.get_version.outputs.package_name }}.zip" GearLister/
         
+        # Verify the zip file was created and has content
+        if [ ! -f "${{ steps.get_version.outputs.package_name }}.zip" ]; then
+          echo "Error: Zip file was not created"
+          exit 1
+        fi
+        
+        ZIP_SIZE=$(stat -f%z "${{ steps.get_version.outputs.package_name }}.zip" 2>/dev/null || stat -c%s "${{ steps.get_version.outputs.package_name }}.zip")
+        if [ "$ZIP_SIZE" -lt 1000 ]; then
+          echo "Error: Zip file is too small ($ZIP_SIZE bytes)"
+          exit 1
+        fi
+        
+        echo "Package created successfully: ${{ steps.get_version.outputs.package_name }}.zip ($ZIP_SIZE bytes)"
+        
         # Verify contents
         echo "=== Package Contents ==="
         unzip -l "${{ steps.get_version.outputs.package_name }}.zip"
+        
+    - name: Verify package before upload
+      run: |
+        cd build
+        if [ ! -f "${{ steps.get_version.outputs.package_name }}.zip" ]; then
+          echo "Error: Package file not found for upload"
+          ls -la
+          exit 1
+        fi
+        echo "Package verified: ${{ steps.get_version.outputs.package_name }}.zip"
+        ls -lh "${{ steps.get_version.outputs.package_name }}.zip"
         
     - name: Upload artifact
       uses: actions/upload-artifact@v4
@@ -104,13 +129,11 @@ jobs:
         (github.event_name == 'workflow_dispatch' && 
          github.event.inputs.create_release == 'true' && 
          steps.get_version.outputs.branch_name == 'main')
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v1
       with:
         files: build/${{ steps.get_version.outputs.package_name }}.zip
         name: GearLister ${{ steps.get_version.outputs.version }}
         tag_name: ${{ steps.get_version.outputs.version }}
-        make_latest: ${{ steps.get_version.outputs.branch_name == 'main' }}
-        generate_release_notes: true
         body: |
           ## GearLister ${{ steps.get_version.outputs.version }}
           
@@ -129,3 +152,5 @@ jobs:
           **Build Trigger**: ${{ github.event_name }}
         draft: false
         prerelease: ${{ steps.get_version.outputs.branch_name != 'main' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
