@@ -330,6 +330,17 @@ function GearLister:ShowMainWindow()
     mainFrame:SetHeight(520)
     mainFrame:SetLayout("Fill")
     mainFrame.frame:SetResizable(false) -- Prevent resizing
+    
+    -- Enable Escape key functionality
+    mainFrame.frame:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            mainFrame:Hide()
+        end
+    end)
+    mainFrame.frame:SetPropagateKeyboardInput(true)
+    mainFrame.frame:EnableKeyboard(true)
+    
+    -- Enhanced close callback with proper cleanup
     mainFrame:SetCallback("OnClose", function(widget)
         inspectMode = false
         inspectTarget = nil
@@ -1218,6 +1229,15 @@ function GearLister:ShowSettingsWindow()
     settingsFrame.frame:SetAlpha(1.0)
     settingsFrame.frame:SetFrameStrata("FULLSCREEN_DIALOG")
     settingsFrame.frame:SetFrameLevel(200)
+    
+    -- Enable Escape key functionality for settings window
+    settingsFrame.frame:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            settingsFrame:Hide()
+        end
+    end)
+    settingsFrame.frame:SetPropagateKeyboardInput(true)
+    settingsFrame.frame:EnableKeyboard(true)
 
     -- Create a solid black background
     if not settingsFrame.frame.solidBG then
@@ -1228,6 +1248,8 @@ function GearLister:ShowSettingsWindow()
 
     settingsFrame:SetCallback("OnClose", function(widget)
         widget:Hide()
+        widget:Release()
+        settingsFrame = nil
     end)
 
     -- Ensure it always stays on top
