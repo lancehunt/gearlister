@@ -160,10 +160,6 @@ When reporting bugs, please include:
 - Steps to reproduce
 - Any error messages
 
-## 📜 License
-
-This project is open source. Feel free to modify and redistribute according to the license terms.
-
 ## 🙏 Credits
 
 - **Author**: Bunnycrits
