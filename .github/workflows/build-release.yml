@@ -160,6 +160,12 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
+    - name: Read addon config
+      id: addon_config
+      run: |
+        GAME_VERSION=$(yq eval '.curseforge.game_version' addon.yml)
+        echo "game_version=${GAME_VERSION}" >> $GITHUB_OUTPUT
+        
     - name: Publish to CurseForge
       if: |
         github.event_name == 'workflow_dispatch' && 
@@ -184,5 +190,5 @@ jobs:
           3. Type `/gear` in game to use!
         changelog_type: markdown
         game_endpoint: wow
-        game_versions: '11504'
+        game_versions: ${{ steps.addon_config.outputs.game_version }}
         release_type: release

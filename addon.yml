@@ -1,0 +1,18 @@
+# GearLister Addon Configuration
+# This file contains external configuration for build and publishing
+
+# CurseForge configuration
+curseforge:
+  game_version: "1.15.7"  # WoW Classic Era version for CurseForge
+  
+# Build configuration
+build:
+  exclude_files:
+    - "README.md"
+    - "LICENSE.md" 
+    - "*.png"
+    - "scripts/"
+    - ".git*"
+    - "*.bak"
+    - "debug_test.lua*"
+    - "build/"
