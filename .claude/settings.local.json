@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm:*)",
+      "Bash(export DOCKER_HOST=unix:///Users/master/.rd/docker.sock)",
+      "Bash(act:*)",
+      "Bash(ls:*)",
+      "Bash(chmod:*)",
+      "Bash(./test-build.sh:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)"
+    ],
+    "deny": []
+  }
+}

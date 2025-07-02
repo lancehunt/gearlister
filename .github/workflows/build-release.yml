@@ -80,8 +80,8 @@ jobs:
         # Create build directory
         mkdir -p build/GearLister
         
-        # Copy addon files (exclude git, github, and backup files)
-        rsync -av --exclude='.git*' --exclude='*.bak' --exclude='debug_test.lua*' --exclude='build/' . build/GearLister/
+        # Copy addon files (only essential files for WoW addon)
+        rsync -av --exclude='.git*' --exclude='*.bak' --exclude='debug_test.lua*' --exclude='build/' --exclude='README.md' --exclude='LICENSE.md' --exclude='*.png' --exclude='scripts/' . build/GearLister/
         
         # Create zip file with branch-aware naming
         cd build
