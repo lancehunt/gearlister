@@ -22,6 +22,11 @@ on:
         required: false
         type: boolean
         default: false
+      publish_curseforge:
+        description: 'Publish to CurseForge'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -154,3 +159,30 @@ jobs:
         prerelease: ${{ steps.get_version.outputs.branch_name != 'main' }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Publish to CurseForge
+      if: |
+        github.event_name == 'workflow_dispatch' && 
+        github.event.inputs.publish_curseforge == 'true' && 
+        steps.get_version.outputs.branch_name == 'main'
+      uses: itsmeow/curseforge-upload@v3
+      with:
+        token: ${{ secrets.CURSEFORGE_API_TOKEN }}
+        project_id: ${{ vars.CURSEFORGE_PROJECT_ID }}
+        file_path: build/${{ steps.get_version.outputs.package_name }}.zip
+        changelog: |
+          ## GearLister ${{ steps.get_version.outputs.version }}
+          
+          Ready-to-install addon package for World of Warcraft Classic.
+          
+          ### What's New:
+          See GitHub releases for detailed changes in this release.
+          
+          ### Installation:
+          1. Download and extract to your `World of Warcraft/_classic_era_/Interface/AddOns/`
+          2. Restart WoW Classic
+          3. Type `/gear` in game to use!
+        changelog_type: markdown
+        game_endpoint: wow
+        game_versions: '11504'
+        release_type: release

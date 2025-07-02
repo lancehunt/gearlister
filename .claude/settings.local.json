@@ -8,7 +8,8 @@
       "Bash(chmod:*)",
       "Bash(./test-build.sh:*)",
       "Bash(mkdir:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
