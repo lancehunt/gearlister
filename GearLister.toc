@@ -2,7 +2,7 @@
 ## Title: GearLister
 ## Notes: Shows equipped gear in a copyable dialog with integrated history panel and Wowhead links
 ## Author: Bunnycrits
-## Version: 4.10.10
+## Version: 4.11.1
 ## SavedVariables: GearListerDB
 ## OptionalDeps: Ace3
 

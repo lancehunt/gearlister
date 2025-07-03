@@ -47,7 +47,8 @@ local defaults = {
             addNewline = false,
             maxHistoryEntries = 50
         },
-        gearHistory = {}
+        gearHistory = {},  -- Legacy shared history (for migration)
+        characterHistory = {}  -- Per-character history storage
     }
 }
 
@@ -115,6 +116,9 @@ function GearLister:OnInitialize()
 
         -- Initialize database
         self.db = AceDB:New("GearListerDB", defaults, true)
+        
+        -- Migrate legacy history data to character-specific storage
+        self:MigrateLegacyHistory()
 
         -- Register slash commands
         self:RegisterChatCommand("gear", "SlashProcessor")
@@ -199,12 +203,51 @@ function GearLister:CreateGearHash(items)
     return table.concat(items, "|")
 end
 
+-- Get the current character's history, creating it if it doesn't exist
+function GearLister:GetCurrentCharacterHistory()
+    local currentChar = UnitName("player")
+    if not currentChar then return {} end
+    
+    if not self.db.profile.characterHistory[currentChar] then
+        self.db.profile.characterHistory[currentChar] = {}
+    end
+    
+    return self.db.profile.characterHistory[currentChar]
+end
+
+-- Migrate legacy shared history to character-specific history (one-time migration)
+function GearLister:MigrateLegacyHistory()
+    local legacyHistory = self.db.profile.gearHistory
+    if not legacyHistory or #legacyHistory == 0 then return end
+    
+    local currentChar = UnitName("player")
+    if not currentChar then return end
+    
+    -- All legacy history goes to the current character (who viewed it)
+    -- This preserves the viewing history for the character who inspected all the gear
+    if not self.db.profile.characterHistory[currentChar] then
+        self.db.profile.characterHistory[currentChar] = {}
+    end
+    
+    -- Copy all legacy entries to current character's history
+    for _, entry in ipairs(legacyHistory) do
+        table.insert(self.db.profile.characterHistory[currentChar], entry)
+    end
+    
+    -- Clear legacy history after migration
+    self.db.profile.gearHistory = {}
+    self:Print("|cff00ff00Legacy gear history migrated to " .. currentChar .. "'s viewing history (" .. #legacyHistory .. " entries)|r")
+end
+
 function GearLister:SaveToHistory(characterName, items)
     local gearHash = self:CreateGearHash(items)
     local timestamp = date("%Y-%m-%d %H:%M:%S")
-    local gearHistory = self.db.profile.gearHistory
+    local currentChar = UnitName("player")
+    
+    -- Get the current character's history
+    local gearHistory = self:GetCurrentCharacterHistory()
 
-    -- Check if this exact gear set already exists
+    -- Check if this exact gear set already exists for this character
     for i, entry in ipairs(gearHistory) do
         if entry.hash == gearHash and entry.characterName == characterName then
             -- Update timestamp and move to front
@@ -236,6 +279,7 @@ function GearLister:SaveToHistory(characterName, items)
 
     -- Force immediate history list refresh
     self:RefreshHistoryList()
+    self:Print("|cff00ff00Saved gear for " .. characterName .. " (viewed by " .. (currentChar or "Unknown") .. ")|r")
 end
 
 function GearLister:GetCurrentTargetName()
@@ -517,8 +561,8 @@ function GearLister:RefreshHistoryList()
         end
     end
 
-    -- Add history entries as clickable text rows
-    local gearHistory = self.db.profile.gearHistory
+    -- Add history entries as clickable text rows (current character only)
+    local gearHistory = self:GetCurrentCharacterHistory()
     for i, entry in ipairs(gearHistory) do
         local entryContainer = AceGUI:Create("SimpleGroup")
         entryContainer:SetFullWidth(true)
@@ -617,7 +661,7 @@ function GearLister:RefreshGearDisplay()
 
         if comparisonMode and comparisonIndexA and comparisonIndexB then
             -- Visual comparison mode
-            local gearHistory = self.db.profile.gearHistory
+            local gearHistory = self:GetCurrentCharacterHistory()
             local entryA = gearHistory[comparisonIndexA]
             local entryB = gearHistory[comparisonIndexB]
 
@@ -662,7 +706,7 @@ function GearLister:RefreshGearDisplay()
             local characterName = ""
 
             if currentHistoryIndex then
-                local gearHistory = self.db.profile.gearHistory
+                local gearHistory = self:GetCurrentCharacterHistory()
                 if gearHistory[currentHistoryIndex] then
                     local entry = gearHistory[currentHistoryIndex]
                     items = entry.items
@@ -728,7 +772,7 @@ function GearLister:RefreshGearDisplay()
         if comparisonMode then
             -- Text comparison mode
             if comparisonIndexA and comparisonIndexB then
-                local gearHistory = self.db.profile.gearHistory
+                local gearHistory = self:GetCurrentCharacterHistory()
                 local entryA = gearHistory[comparisonIndexA]
                 local entryB = gearHistory[comparisonIndexB]
 
@@ -741,7 +785,7 @@ function GearLister:RefreshGearDisplay()
             else
                 gearText = "Comparison Mode: Select two characters from history to compare their gear.\n\n"
                 if comparisonIndexA then
-                    local gearHistory = self.db.profile.gearHistory
+                    local gearHistory = self:GetCurrentCharacterHistory()
                     if gearHistory[comparisonIndexA] then
                         gearText = gearText ..
                             "First character selected: " .. gearHistory[comparisonIndexA].characterName .. "\n"
@@ -755,7 +799,7 @@ function GearLister:RefreshGearDisplay()
             titleSuffix = " - Comparison Mode"
         elseif currentHistoryIndex then
             -- Show history entry
-            local gearHistory = self.db.profile.gearHistory
+            local gearHistory = self:GetCurrentCharacterHistory()
             if gearHistory[currentHistoryIndex] then
                 local entry = gearHistory[currentHistoryIndex]
                 gearText = table.concat(entry.items, "\n")
@@ -1154,7 +1198,8 @@ function GearLister:CompareGearSets(entryA, entryB)
 end
 
 function GearLister:DeleteHistoryEntry(index)
-    table.remove(self.db.profile.gearHistory, index)
+    local gearHistory = self:GetCurrentCharacterHistory()
+    table.remove(gearHistory, index)
 
     -- Reset selection if we deleted the selected entry
     if currentHistoryIndex == index then
@@ -1200,10 +1245,15 @@ function GearLister:RefreshCurrentGear()
 end
 
 function GearLister:ClearHistory()
-    self.db.profile.gearHistory = {}
-    currentHistoryIndex = nil
-    self:RefreshMainWindow()
-    self:Print("|cff00ff00History cleared.|r")
+    local currentChar = UnitName("player")
+    if currentChar and self.db.profile.characterHistory[currentChar] then
+        self.db.profile.characterHistory[currentChar] = {}
+        currentHistoryIndex = nil
+        self:RefreshMainWindow()
+        self:Print("|cff00ff00History cleared for " .. currentChar .. ".|r")
+    else
+        self:Print("|cffff0000Unable to clear history - character not found.|r")
+    end
 end
 
 -- Settings Window
@@ -1386,8 +1436,8 @@ function GearLister:SaveSettings()
     if maxEntries and maxEntries > 0 then
         settings.maxHistoryEntries = maxEntries
 
-        -- Trim history if needed
-        local gearHistory = self.db.profile.gearHistory
+        -- Trim history if needed (for current character)
+        local gearHistory = self:GetCurrentCharacterHistory()
         while #gearHistory > maxEntries do
             table.remove(gearHistory)
         end
