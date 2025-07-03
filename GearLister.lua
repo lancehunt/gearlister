@@ -106,6 +106,7 @@ local comparisonMode = false
 local comparisonIndexA = nil
 local comparisonIndexB = nil
 local visualMode = true -- Changed default to true (Visual Mode is default)
+local pendingItemLoads = {} -- Track items that are being loaded to avoid excessive refreshes
 
 function GearLister:OnInitialize()
     -- Protected initialization with error handling
@@ -126,6 +127,7 @@ function GearLister:OnInitialize()
 
         -- Register events
         self:RegisterEvent("INSPECT_READY", "OnInspectReady")
+        self:RegisterEvent("GET_ITEM_INFO_RECEIVED", "OnItemInfoReceived")
     end)
 
     if not success then
@@ -355,6 +357,19 @@ function GearLister:OnInspectReady()
             inspectMode = false
             inspectTarget = nil
             ClearInspectPlayer()
+        end
+    end
+end
+
+function GearLister:OnItemInfoReceived(eventName, itemID, success)
+    -- Handle item info loading completion
+    if success and pendingItemLoads[itemID] then
+        -- Remove from pending loads
+        pendingItemLoads[itemID] = nil
+        
+        -- Refresh visual display if it's open and we're in visual mode
+        if mainFrame and mainFrame.frame and mainFrame.frame:IsShown() and visualMode then
+            self:RefreshGearDisplay()
         end
     end
 end
@@ -1050,8 +1065,11 @@ function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, com
                     if itemString then
                         local itemID = string.match(itemString, "^(%d+)")
                         if itemID then
-                            -- Force item loading
-                            GetItemInfo(tonumber(itemID))
+                            local numericItemID = tonumber(itemID)
+                            -- Track this item as pending load to trigger refresh when ready
+                            pendingItemLoads[numericItemID] = true
+                            -- Force item loading - this will trigger GET_ITEM_INFO_RECEIVED when complete
+                            GetItemInfo(numericItemID)
                         end
                     end
                 end
