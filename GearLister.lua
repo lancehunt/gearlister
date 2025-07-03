@@ -792,7 +792,7 @@ function GearLister:RefreshGearDisplay()
                 local gearPanelFrame = mainFrame.gearPanel and mainFrame.gearPanel.frame
 
                 if gearPanelFrame then
-                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(gearPanelFrame, items, 150, -35)
+                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(gearPanelFrame, items, 175, -35)
 
                     -- Add character label with level/race/class if available
                     local label = mainFrame.visualDisplaySingle:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
