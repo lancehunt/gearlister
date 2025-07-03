@@ -213,7 +213,7 @@ function GearLister:SaveToHistory(characterName, items)
             table.remove(gearHistory, i)
             table.insert(gearHistory, 1, entry)
             self:RefreshHistoryList()
-            self:Print("|cffff9900Duplicate gear set found for " .. characterName .. " - updated timestamp|r")
+            self:Print("|cffff9900Updating gear for " .. characterName .. " |r")
             return
         end
     end
@@ -465,7 +465,7 @@ function GearLister:ShowMainWindow()
         settingsButton:SetCallback("OnClick", function()
             self:ShowSettingsWindow()
         end)
-        settingsButton.frame:SetPoint("LEFT", refreshButton.frame, "RIGHT", 10, 0)
+        settingsButton.frame:SetPoint("BOTTOMRIGHT", container.frame, "BOTTOMRIGHT", -30, 15)
         gearPanel:AddChild(settingsButton)
 
         -- Credit text with version - right aligned inside gear panel
@@ -627,9 +627,9 @@ function GearLister:RefreshGearDisplay()
 
                 if gearPanelFrame then
                     -- Pass comparison data to highlight differences
-                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(gearPanelFrame, entryA.items, 50, -60,
+                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(gearPanelFrame, entryA.items, 50, -45,
                         entryB.items)
-                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(gearPanelFrame, entryB.items, 250, -60,
+                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(gearPanelFrame, entryB.items, 300, -45,
                         entryA.items)
 
                     -- Add character labels
@@ -704,7 +704,7 @@ function GearLister:RefreshGearDisplay()
                 local gearPanelFrame = mainFrame.gearPanel and mainFrame.gearPanel.frame
 
                 if gearPanelFrame then
-                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(gearPanelFrame, items, 150, -60)
+                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(gearPanelFrame, items, 150, -45)
 
                     -- Add character label
                     local label = mainFrame.visualDisplaySingle:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -804,29 +804,36 @@ end
 
 -- Visual gear display layout (like character pane)
 local GEAR_SLOT_POSITIONS = {
-    [1] = { x = 50, y = -50 },   -- Head
-    [2] = { x = 50, y = -90 },   -- Neck
-    [3] = { x = 10, y = -50 },   -- Shoulders
-    [15] = { x = 10, y = -90 },  -- Back
-    [5] = { x = 50, y = -130 },  -- Chest
-    [9] = { x = 10, y = -130 },  -- Wrist
-    [10] = { x = 50, y = -170 }, -- Gloves
-    [6] = { x = 50, y = -210 },  -- Belt
-    [7] = { x = 50, y = -250 },  -- Legs
-    [8] = { x = 50, y = -290 },  -- Feet
-    [11] = { x = 90, y = -170 }, -- Ring1
-    [12] = { x = 90, y = -210 }, -- Ring2
-    [13] = { x = 90, y = -50 },  -- Trinket1
-    [14] = { x = 90, y = -90 },  -- Trinket2
-    [16] = { x = 10, y = -250 }, -- Main Hand
-    [17] = { x = 90, y = -250 }, -- Off Hand
-    [18] = { x = 90, y = -130 }  -- Ranged
+    -- Left column (top to bottom)
+    [1] = { x = 10, y = -30 },   -- Head
+    [2] = { x = 10, y = -80 },   -- Neck
+    [3] = { x = 10, y = -130 },  -- Shoulders
+    [15] = { x = 10, y = -180 }, -- Back
+    [5] = { x = 10, y = -230 },  -- Chest
+    [9] = { x = 10, y = -280 },  -- Wrist
+
+    -- Right column (top to bottom)
+    [10] = { x = 130, y = -30 }, -- Gloves (Hands)
+    [6] = { x = 130, y = -80 },  -- Belt (Waist)
+    [7] = { x = 130, y = -130 }, -- Legs
+    [8] = { x = 130, y = -180 }, -- Feet
+
+    -- Right-aligned rings/trinkets (2x2 grid)
+    [11] = { x = 90, y = -230 },  -- Ring1
+    [12] = { x = 130, y = -230 }, -- Ring2
+    [13] = { x = 90, y = -280 },  -- Trinket1
+    [14] = { x = 130, y = -280 }, -- Trinket2
+
+    -- Bottom row weapons (left to right)
+    [16] = { x = 10, y = -330 }, -- Main Hand
+    [17] = { x = 70, y = -330 }, -- Off Hand
+    [18] = { x = 130, y = -330 } -- Ranged
 }
 
 function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, comparisonItems)
     local visualFrame = CreateFrame("Frame", nil, parent)
-    visualFrame:SetSize(160, 330) -- Reduced height to fit in smaller window
-    visualFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", offsetX or 0, offsetY or -40)
+    visualFrame:SetSize(160, 380) -- Size for compact character pane layout
+    visualFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", offsetX or 0, offsetY or -25)
 
     -- Create item map for easy lookup
     local itemMap = {}
@@ -854,16 +861,10 @@ function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, com
         local slotId = slotInfo.slot
         local slotName = slotInfo.name
 
-        -- Calculate position based on order index (i) but skip a slot after Trinket 2
-        local displayIndex = i
-        if i > 13 then -- After Trinket 2 (13th item), add one to skip a slot
-            displayIndex = i + 1
-        end
-
-        local row = math.ceil(displayIndex / 3) - 1 -- 0-based row (3 items per row)
-        local col = ((displayIndex - 1) % 3)        -- 0-based column
-        local x = 10 + (col * 46)                   -- Increased from 40 to 46px (15% increase)
-        local y = -50 - (row * 46)                  -- Increased from 40 to 46px (15% increase)
+        -- Use authentic character pane positions from GEAR_SLOT_POSITIONS
+        local position = GEAR_SLOT_POSITIONS[slotId]
+        local x = position and position.x or 10  -- Default to left if position not found
+        local y = position and position.y or -50 -- Default to top if position not found
 
         local button = CreateFrame("Button", nil, visualFrame)
         button:SetSize(38, 38) -- Increased from 32 to 38px (20% increase)
