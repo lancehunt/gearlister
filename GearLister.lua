@@ -239,7 +239,7 @@ function GearLister:MigrateLegacyHistory()
     self:Print("|cff00ff00Legacy gear history migrated to " .. currentChar .. "'s viewing history (" .. #legacyHistory .. " entries)|r")
 end
 
-function GearLister:SaveToHistory(characterName, items)
+function GearLister:SaveToHistory(characterName, items, level, race, class)
     local gearHash = self:CreateGearHash(items)
     local timestamp = date("%Y-%m-%d %H:%M:%S")
     local currentChar = UnitName("player")
@@ -267,7 +267,10 @@ function GearLister:SaveToHistory(characterName, items)
         items = items,
         hash = gearHash,
         timestamp = timestamp,
-        displayTime = date("%m/%d %H:%M")
+        displayTime = date("%m/%d %H:%M"),
+        level = level,
+        race = race,
+        class = class
     }
     table.insert(gearHistory, 1, newEntry)
 
@@ -287,6 +290,22 @@ function GearLister:GetCurrentTargetName()
         return UnitName("target")
     end
     return nil
+end
+
+-- Get target's level, race and class information
+function GearLister:GetTargetInfo(targetUnit)
+    targetUnit = targetUnit or "target"
+    
+    if not UnitExists(targetUnit) or not UnitIsPlayer(targetUnit) then
+        return nil, nil, nil, nil
+    end
+    
+    local name = UnitName(targetUnit)
+    local level = UnitLevel(targetUnit)
+    local race = UnitRace(targetUnit)
+    local class = UnitClass(targetUnit)
+    
+    return name, level, race, class
 end
 
 function GearLister:StartInspect()
@@ -676,14 +695,26 @@ function GearLister:RefreshGearDisplay()
                     mainFrame.visualDisplayB = self:CreateVisualGearDisplay(gearPanelFrame, entryB.items, 300, -45,
                         entryA.items)
 
-                    -- Add character labels
+                    -- Add character labels with level/race/class if available
                     local labelA = mainFrame.visualDisplayA:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
                     labelA:SetPoint("TOP", mainFrame.visualDisplayA, "TOP", 0, 20)
-                    labelA:SetText("|cff00ff00" .. entryA.characterName .. "|r")
+                    local labelTextA = entryA.characterName
+                    if entryA.level and entryA.race and entryA.class then
+                        labelTextA = labelTextA .. " (" .. entryA.level .. ", " .. entryA.race .. " " .. entryA.class .. ")"
+                    elseif entryA.race and entryA.class then
+                        labelTextA = labelTextA .. " (" .. entryA.race .. " " .. entryA.class .. ")"
+                    end
+                    labelA:SetText("|cff00ff00" .. labelTextA .. "|r")
 
                     local labelB = mainFrame.visualDisplayB:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
                     labelB:SetPoint("TOP", mainFrame.visualDisplayB, "TOP", 0, 20)
-                    labelB:SetText("|cff0099ff" .. entryB.characterName .. "|r")
+                    local labelTextB = entryB.characterName
+                    if entryB.level and entryB.race and entryB.class then
+                        labelTextB = labelTextB .. " (" .. entryB.level .. ", " .. entryB.race .. " " .. entryB.class .. ")"
+                    elseif entryB.race and entryB.class then
+                        labelTextB = labelTextB .. " (" .. entryB.race .. " " .. entryB.class .. ")"
+                    end
+                    labelB:SetText("|cff0099ff" .. labelTextB .. "|r")
 
                     -- Add legend at the bottom
                     local legend = containerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -704,6 +735,7 @@ function GearLister:RefreshGearDisplay()
             -- Single character visual mode
             local items = {}
             local characterName = ""
+            local level, race, class = nil, nil, nil
 
             if currentHistoryIndex then
                 local gearHistory = self:GetCurrentCharacterHistory()
@@ -711,6 +743,9 @@ function GearLister:RefreshGearDisplay()
                     local entry = gearHistory[currentHistoryIndex]
                     items = entry.items
                     characterName = entry.characterName
+                    level = entry.level
+                    race = entry.race
+                    class = entry.class
                     titleSuffix = " - Visual: " .. entry.characterName
                 end
             else
@@ -735,11 +770,17 @@ function GearLister:RefreshGearDisplay()
                     titleSuffix = " - Visual: " .. characterName
                 end
 
+                -- Get level, race and class for current gear
+                local name, targetLevel, targetRace, targetClass = self:GetTargetInfo(targetUnit)
+                level = targetLevel
+                race = targetRace
+                class = targetClass
+
                 items = self:GetEquippedItems(targetUnit)
 
                 -- Auto-save current gear to history (but not in comparison mode)
                 if characterName and not comparisonMode then
-                    self:SaveToHistory(characterName, items)
+                    self:SaveToHistory(characterName, items, level, race, class)
                 end
             end
 
@@ -750,10 +791,16 @@ function GearLister:RefreshGearDisplay()
                 if gearPanelFrame then
                     mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(gearPanelFrame, items, 150, -45)
 
-                    -- Add character label
+                    -- Add character label with level/race/class if available
                     local label = mainFrame.visualDisplaySingle:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
                     label:SetPoint("TOP", mainFrame.visualDisplaySingle, "TOP", 0, 20)
-                    label:SetText("|cffffffff" .. characterName .. "|r")
+                    local labelText = characterName
+                    if level and race and class then
+                        labelText = labelText .. " (" .. level .. ", " .. race .. " " .. class .. ")"
+                    elseif race and class then
+                        labelText = labelText .. " (" .. race .. " " .. class .. ")"
+                    end
+                    label:SetText("|cffffffff" .. labelText .. "|r")
                 else
                     -- Fallback to text mode
                     if mainFrame.gearEditBox then
@@ -829,7 +876,8 @@ function GearLister:RefreshGearDisplay()
 
             -- Auto-save current gear to history (always save when not in comparison mode)
             if characterName then
-                self:SaveToHistory(characterName, items)
+                local name, level, race, class = self:GetTargetInfo(targetUnit)
+                self:SaveToHistory(characterName, items, level, race, class)
             end
         end
 
@@ -1232,7 +1280,8 @@ function GearLister:RefreshCurrentGear()
                 -- No inspect mode, get current gear immediately and save
                 local characterName = UnitName("player")
                 local items = self:GetEquippedItems("player")
-                self:SaveToHistory(characterName, items)
+                local name, level, race, class = self:GetTargetInfo("player")
+                self:SaveToHistory(characterName, items, level, race, class)
                 -- Force complete UI refresh
                 self:RefreshMainWindow()
                 self:Print("|cff00ff00Inspected and saved gear for " .. characterName .. "|r")
