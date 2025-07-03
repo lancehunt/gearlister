@@ -47,8 +47,8 @@ local defaults = {
             addNewline = false,
             maxHistoryEntries = 50
         },
-        gearHistory = {},  -- Legacy shared history (for migration)
-        characterHistory = {}  -- Per-character history storage
+        gearHistory = {},     -- Legacy shared history (for migration)
+        characterHistory = {} -- Per-character history storage
     }
 }
 
@@ -116,7 +116,7 @@ function GearLister:OnInitialize()
 
         -- Initialize database
         self.db = AceDB:New("GearListerDB", defaults, true)
-        
+
         -- Migrate legacy history data to character-specific storage
         self:MigrateLegacyHistory()
 
@@ -207,11 +207,11 @@ end
 function GearLister:GetCurrentCharacterHistory()
     local currentChar = UnitName("player")
     if not currentChar then return {} end
-    
+
     if not self.db.profile.characterHistory[currentChar] then
         self.db.profile.characterHistory[currentChar] = {}
     end
-    
+
     return self.db.profile.characterHistory[currentChar]
 end
 
@@ -219,31 +219,32 @@ end
 function GearLister:MigrateLegacyHistory()
     local legacyHistory = self.db.profile.gearHistory
     if not legacyHistory or #legacyHistory == 0 then return end
-    
+
     local currentChar = UnitName("player")
     if not currentChar then return end
-    
+
     -- All legacy history goes to the current character (who viewed it)
     -- This preserves the viewing history for the character who inspected all the gear
     if not self.db.profile.characterHistory[currentChar] then
         self.db.profile.characterHistory[currentChar] = {}
     end
-    
+
     -- Copy all legacy entries to current character's history
     for _, entry in ipairs(legacyHistory) do
         table.insert(self.db.profile.characterHistory[currentChar], entry)
     end
-    
+
     -- Clear legacy history after migration
     self.db.profile.gearHistory = {}
-    self:Print("|cff00ff00Legacy gear history migrated to " .. currentChar .. "'s viewing history (" .. #legacyHistory .. " entries)|r")
+    self:Print("|cff00ff00Legacy gear history migrated to " ..
+        currentChar .. "'s viewing history (" .. #legacyHistory .. " entries)|r")
 end
 
 function GearLister:SaveToHistory(characterName, items, level, race, class)
     local gearHash = self:CreateGearHash(items)
     local timestamp = date("%Y-%m-%d %H:%M:%S")
     local currentChar = UnitName("player")
-    
+
     -- Get the current character's history
     local gearHistory = self:GetCurrentCharacterHistory()
 
@@ -295,16 +296,16 @@ end
 -- Get target's level, race and class information
 function GearLister:GetTargetInfo(targetUnit)
     targetUnit = targetUnit or "target"
-    
+
     if not UnitExists(targetUnit) or not UnitIsPlayer(targetUnit) then
         return nil, nil, nil, nil
     end
-    
+
     local name = UnitName(targetUnit)
     local level = UnitLevel(targetUnit)
     local race = UnitRace(targetUnit)
     local class = UnitClass(targetUnit)
-    
+
     return name, level, race, class
 end
 
@@ -690,27 +691,29 @@ function GearLister:RefreshGearDisplay()
 
                 if gearPanelFrame then
                     -- Pass comparison data to highlight differences
-                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(gearPanelFrame, entryA.items, 50, -45,
+                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(gearPanelFrame, entryA.items, 50, -35,
                         entryB.items)
-                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(gearPanelFrame, entryB.items, 300, -45,
+                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(gearPanelFrame, entryB.items, 300, -35,
                         entryA.items)
 
                     -- Add character labels with level/race/class if available
                     local labelA = mainFrame.visualDisplayA:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-                    labelA:SetPoint("TOP", mainFrame.visualDisplayA, "TOP", 0, 20)
+                    labelA:SetPoint("TOP", mainFrame.visualDisplayA, "TOP", 0, 0)
                     local labelTextA = entryA.characterName
                     if entryA.level and entryA.race and entryA.class then
-                        labelTextA = labelTextA .. " (" .. entryA.level .. ", " .. entryA.race .. " " .. entryA.class .. ")"
+                        labelTextA = labelTextA ..
+                            " (" .. entryA.level .. ", " .. entryA.race .. " " .. entryA.class .. ")"
                     elseif entryA.race and entryA.class then
                         labelTextA = labelTextA .. " (" .. entryA.race .. " " .. entryA.class .. ")"
                     end
                     labelA:SetText("|cff00ff00" .. labelTextA .. "|r")
 
                     local labelB = mainFrame.visualDisplayB:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-                    labelB:SetPoint("TOP", mainFrame.visualDisplayB, "TOP", 0, 20)
+                    labelB:SetPoint("TOP", mainFrame.visualDisplayB, "TOP", 0, 0)
                     local labelTextB = entryB.characterName
                     if entryB.level and entryB.race and entryB.class then
-                        labelTextB = labelTextB .. " (" .. entryB.level .. ", " .. entryB.race .. " " .. entryB.class .. ")"
+                        labelTextB = labelTextB ..
+                            " (" .. entryB.level .. ", " .. entryB.race .. " " .. entryB.class .. ")"
                     elseif entryB.race and entryB.class then
                         labelTextB = labelTextB .. " (" .. entryB.race .. " " .. entryB.class .. ")"
                     end
@@ -789,11 +792,11 @@ function GearLister:RefreshGearDisplay()
                 local gearPanelFrame = mainFrame.gearPanel and mainFrame.gearPanel.frame
 
                 if gearPanelFrame then
-                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(gearPanelFrame, items, 150, -45)
+                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(gearPanelFrame, items, 150, -35)
 
                     -- Add character label with level/race/class if available
                     local label = mainFrame.visualDisplaySingle:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-                    label:SetPoint("TOP", mainFrame.visualDisplaySingle, "TOP", 0, 20)
+                    label:SetPoint("TOP", mainFrame.visualDisplaySingle, "TOP", 0, 0)
                     local labelText = characterName
                     if level and race and class then
                         labelText = labelText .. " (" .. level .. ", " .. race .. " " .. class .. ")"
@@ -1064,9 +1067,9 @@ function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, com
             -- No special effects for empty slots in comparison mode
         end
 
-        -- Add slot label positioned above the icon
+        -- Add slot label positioned below the icon
         button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        button.label:SetPoint("BOTTOM", button, "TOP", 0, 2)
+        button.label:SetPoint("TOP", button, "BOTTOM", 0, -2)
         button.label:SetText(slotName)
         button.label:SetTextColor(0.8, 0.8, 0.8)
 
