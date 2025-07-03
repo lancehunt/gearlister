@@ -1220,13 +1220,30 @@ function GearLister:CompareGearSets(entryA, entryB)
 
             if nameA and nameB then
                 if nameA == nameB then
-                    -- Same item
-                    comparisonText = comparisonText .. "|cff808080" .. slotName .. ": " .. nameA .. " (Same)|r\n"
+                    -- Same item - skip entirely as requested
+                    -- (no output for identical items)
                 else
-                    -- Different items
+                    -- Different items - show with Wowhead links
+                    local delimiter = self:GetActualDelimiter()
                     comparisonText = comparisonText .. "|cffffff00" .. slotName .. ":|r\n"
-                    comparisonText = comparisonText .. "  |cff00ff00A: " .. nameA .. "|r\n"
-                    comparisonText = comparisonText .. "  |cff0099ffB: " .. nameB .. "|r\n"
+                    
+                    -- Extract item ID and create Wowhead link for item A
+                    local itemIdA = linkA and self:GetItemIdFromLink(linkA) or nil
+                    local wowheadA = itemIdA and ("https://classic.wowhead.com/item=" .. itemIdA) or ""
+                    comparisonText = comparisonText .. "  |cff00ff00A: " .. nameA
+                    if wowheadA ~= "" then
+                        comparisonText = comparisonText .. delimiter .. wowheadA
+                    end
+                    comparisonText = comparisonText .. "|r\n"
+                    
+                    -- Extract item ID and create Wowhead link for item B
+                    local itemIdB = linkB and self:GetItemIdFromLink(linkB) or nil
+                    local wowheadB = itemIdB and ("https://classic.wowhead.com/item=" .. itemIdB) or ""
+                    comparisonText = comparisonText .. "  |cff0099ffB: " .. nameB
+                    if wowheadB ~= "" then
+                        comparisonText = comparisonText .. delimiter .. wowheadB
+                    end
+                    comparisonText = comparisonText .. "|r\n"
                 end
             end
         elseif itemA and not itemB then
@@ -1242,7 +1259,14 @@ function GearLister:CompareGearSets(entryA, entryB)
             end
 
             if nameA then
-                comparisonText = comparisonText .. "|cffff0000" .. slotName .. ": " .. nameA .. " (B missing)|r\n"
+                local delimiter = self:GetActualDelimiter()
+                local itemIdA = linkA and self:GetItemIdFromLink(linkA) or nil
+                local wowheadA = itemIdA and ("https://classic.wowhead.com/item=" .. itemIdA) or ""
+                comparisonText = comparisonText .. "|cffff0000" .. slotName .. ": " .. nameA
+                if wowheadA ~= "" then
+                    comparisonText = comparisonText .. delimiter .. wowheadA
+                end
+                comparisonText = comparisonText .. " (B missing)|r\n"
             end
         elseif not itemA and itemB then
             -- B has item, A doesn't
@@ -1257,7 +1281,14 @@ function GearLister:CompareGearSets(entryA, entryB)
             end
 
             if nameB then
-                comparisonText = comparisonText .. "|cffff9900" .. slotName .. ": " .. nameB .. " (A missing)|r\n"
+                local delimiter = self:GetActualDelimiter()
+                local itemIdB = linkB and self:GetItemIdFromLink(linkB) or nil
+                local wowheadB = itemIdB and ("https://classic.wowhead.com/item=" .. itemIdB) or ""
+                comparisonText = comparisonText .. "|cffff9900" .. slotName .. ": " .. nameB
+                if wowheadB ~= "" then
+                    comparisonText = comparisonText .. delimiter .. wowheadB
+                end
+                comparisonText = comparisonText .. " (A missing)|r\n"
             end
         end
         -- If neither has item, skip the slot
