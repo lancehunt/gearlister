@@ -67,3 +67,6 @@ The addon is entirely self-contained with no external dependencies beyond the in
 - When performing git commits, follow the best practices of 80 char titles and use bullets for additional notes
 - Omit any Claude attribution
 - Whenever pushing git changes, only push the current branch not all branches
+
+## Version Management
+- Every time we make a change to the addon, bump the version following SemVer rules

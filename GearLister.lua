@@ -325,154 +325,159 @@ function GearLister:ShowMainWindow()
     local success, error = pcall(function()
         -- Create main window - reduced height by 20% (650 -> 520) and prevent resizing
         mainFrame = AceGUI:Create("Frame")
-    mainFrame:SetTitle("GearList")
-    mainFrame:SetWidth(900)
-    mainFrame:SetHeight(520)
-    mainFrame:SetLayout("Fill")
-    mainFrame.frame:SetResizable(false) -- Prevent resizing
-    
-    -- Enable Escape key functionality
-    mainFrame.frame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            mainFrame:Hide()
-            -- Stop propagation to prevent WoW main menu from opening
-            return
-        end
-        -- Allow other keys to propagate normally
-        self:SetPropagateKeyboardInput(true)
-    end)
-    mainFrame.frame:SetPropagateKeyboardInput(false) -- Default to false, enable per-key
-    mainFrame.frame:EnableKeyboard(true)
-    
-    -- Enhanced close callback with proper cleanup
-    mainFrame:SetCallback("OnClose", function(widget)
-        inspectMode = false
-        inspectTarget = nil
-        currentHistoryIndex = nil
-        ClearInspectPlayer()
-        widget:Hide()
-    end)
+        mainFrame:SetTitle("GearList")
+        mainFrame:SetWidth(900)
+        mainFrame:SetHeight(520)
+        mainFrame:SetLayout("Fill")
+        mainFrame.frame:SetResizable(false) -- Prevent resizing
 
-    -- Create main container with manual positioning
-    local container = AceGUI:Create("SimpleGroup")
-    container:SetFullWidth(true)
-    container:SetFullHeight(true)
-    container:SetLayout(nil) -- No automatic layout
-    mainFrame:AddChild(container)
+        -- Enable Escape key functionality
+        mainFrame.frame:SetScript("OnKeyDown", function(self, key)
+            if key == "ESCAPE" then
+                mainFrame:Hide()
+                -- Stop propagation to prevent WoW main menu from opening
+                return
+            end
+            -- Allow other keys to propagate normally
+            self:SetPropagateKeyboardInput(true)
+        end)
+        mainFrame.frame:SetPropagateKeyboardInput(false) -- Default to false, enable per-key
+        mainFrame.frame:EnableKeyboard(true)
 
-    -- History list label
-    local historyLabel = AceGUI:Create("Label")
-    historyLabel:SetText("Gear History:")
-    historyLabel:SetWidth(200)
-    historyLabel.frame:SetPoint("TOPLEFT", container.frame, "TOPLEFT", 10, -10)
-    container:AddChild(historyLabel)
+        -- Enhanced close callback with proper cleanup
+        mainFrame:SetCallback("OnClose", function(widget)
+            inspectMode = false
+            inspectTarget = nil
+            currentHistoryIndex = nil
+            ClearInspectPlayer()
+            widget:Hide()
+        end)
 
-    -- History list - reduced height proportionally (500 -> 370)
-    local historyList = AceGUI:Create("ScrollFrame")
-    historyList:SetWidth(200)
-    historyList:SetHeight(370)
-    historyList:SetLayout("List")
-    historyList.frame:SetPoint("TOPLEFT", historyLabel.frame, "BOTTOMLEFT", 0, -5)
-    container:AddChild(historyList)
+        -- Create main container with manual positioning
+        local container = AceGUI:Create("SimpleGroup")
+        container:SetFullWidth(true)
+        container:SetFullHeight(true)
+        container:SetLayout(nil) -- No automatic layout
+        mainFrame:AddChild(container)
 
-    -- Store reference to history list
-    mainFrame.historyList = historyList
+        -- History panel with frame (taller to reach close button)
+        local historyPanel = AceGUI:Create("InlineGroup")
+        historyPanel:SetTitle("Gear History")
+        historyPanel:SetWidth(220)
+        historyPanel:SetHeight(440)
+        historyPanel:SetLayout(nil) -- Manual layout
+        historyPanel.frame:SetPoint("TOPLEFT", container.frame, "TOPLEFT", 5, -5)
+        container:AddChild(historyPanel)
 
-    -- Current gear button - changed label to "Refresh"
-    local currentButton = AceGUI:Create("Button")
-    currentButton:SetText("Refresh")
-    currentButton:SetFullWidth(true)
-    currentButton:SetCallback("OnClick", function()
-        self:SelectCurrentGear()
-    end)
-    historyList:AddChild(currentButton)
+        -- History list inside the panel (taller)
+        local historyList = AceGUI:Create("ScrollFrame")
+        historyList:SetWidth(200)
+        historyList:SetHeight(365)
+        historyList:SetLayout("List")
+        historyList.frame:SetPoint("TOPLEFT", historyPanel.frame, "TOPLEFT", 10, -25)
+        historyPanel:AddChild(historyList)
 
-    -- Clear History button (positioned below history list)
-    local clearHistoryButton = AceGUI:Create("Button")
-    clearHistoryButton:SetText("Clear History")
-    clearHistoryButton:SetWidth(200)
-    clearHistoryButton:SetCallback("OnClick", function()
-        self:ClearHistory()
-    end)
-    clearHistoryButton.frame:SetPoint("TOPLEFT", historyList.frame, "BOTTOMLEFT", 0, -10)
-    container:AddChild(clearHistoryButton)
+        -- Store reference to history list
+        mainFrame.historyList = historyList
 
-    -- Store reference for later updates
-    mainFrame.clearHistoryButton = clearHistoryButton
+        -- Current gear button - changed label to "Refresh"
+        local currentButton = AceGUI:Create("Button")
+        currentButton:SetText("Refresh")
+        currentButton:SetFullWidth(true)
+        currentButton:SetCallback("OnClick", function()
+            self:SelectCurrentGear()
+        end)
+        historyList:AddChild(currentButton)
 
-    -- Gear display label
-    local gearLabel = AceGUI:Create("Label")
-    gearLabel:SetText("Equipped Gear:")
-    gearLabel:SetWidth(600)
-    gearLabel.frame:SetPoint("TOPLEFT", container.frame, "TOPLEFT", 230, -10)
-    container:AddChild(gearLabel)
+        -- Clear History button (positioned inside history panel)
+        local clearHistoryButton = AceGUI:Create("Button")
+        clearHistoryButton:SetText("Clear History")
+        clearHistoryButton:SetWidth(200)
+        clearHistoryButton:SetCallback("OnClick", function()
+            self:ClearHistory()
+        end)
+        clearHistoryButton.frame:SetPoint("TOPLEFT", historyList.frame, "BOTTOMLEFT", 0, -10)
+        historyPanel:AddChild(clearHistoryButton)
 
-    -- Comparison mode toggle
-    local comparisonToggle = AceGUI:Create("CheckBox")
-    comparisonToggle:SetLabel("Comparison Mode")
-    comparisonToggle:SetValue(comparisonMode)
-    comparisonToggle:SetWidth(150)
-    comparisonToggle:SetCallback("OnValueChanged", function(widget, event, value)
-        self:ToggleComparisonMode(value)
-    end)
-    comparisonToggle.frame:SetPoint("TOPRIGHT", container.frame, "TOPRIGHT", -10, -10)
-    container:AddChild(comparisonToggle)
-    mainFrame.comparisonToggle = comparisonToggle
+        -- Store reference for later updates
+        mainFrame.clearHistoryButton = clearHistoryButton
 
-    -- Text mode toggle (inverted from visual mode)
-    local textToggle = AceGUI:Create("CheckBox")
-    textToggle:SetLabel("Text Mode")
-    textToggle:SetValue(not visualMode) -- Inverted: checked when visual mode is false
-    textToggle:SetWidth(120)
-    textToggle:SetCallback("OnValueChanged", function(widget, event, value)
-        self:ToggleVisualMode(not value) -- Invert the value since this is "Text Mode"
-    end)
-    textToggle.frame:SetPoint("TOPRIGHT", container.frame, "TOPRIGHT", -170, -10)
-    container:AddChild(textToggle)
-    mainFrame.textToggle = textToggle
+        -- Gear display panel with frame (much narrower and taller)
+        local gearPanel = AceGUI:Create("InlineGroup")
+        gearPanel:SetTitle("Equipped Gear")
+        gearPanel:SetWidth(615)
+        gearPanel:SetHeight(440)
+        gearPanel:SetLayout(nil) -- Manual layout
+        gearPanel.frame:SetPoint("TOPLEFT", container.frame, "TOPLEFT", 235, -5)
+        container:AddChild(gearPanel)
 
-    -- Gear display - reduced height proportionally (420 -> 310)
-    local gearEditBox = AceGUI:Create("MultiLineEditBox")
-    gearEditBox:SetWidth(600)
-    gearEditBox:SetHeight(310)
-    gearEditBox:DisableButton(true)
-    gearEditBox.frame:SetPoint("TOPLEFT", gearLabel.frame, "BOTTOMLEFT", 0, -5)
-    gearEditBox.frame:SetPoint("BOTTOMRIGHT", container.frame, "BOTTOMRIGHT", -20, 50) -- Anchor to bottom
-    container:AddChild(gearEditBox)
+        -- Comparison mode toggle (positioned inside gear panel, moved up)
+        local comparisonToggle = AceGUI:Create("CheckBox")
+        comparisonToggle:SetLabel("Comparison Mode")
+        comparisonToggle:SetValue(comparisonMode)
+        comparisonToggle:SetWidth(150)
+        comparisonToggle:SetCallback("OnValueChanged", function(widget, event, value)
+            self:ToggleComparisonMode(value)
+        end)
+        comparisonToggle.frame:SetPoint("TOPRIGHT", gearPanel.frame, "TOPRIGHT", -20, 5)
+        gearPanel:AddChild(comparisonToggle)
+        mainFrame.comparisonToggle = comparisonToggle
 
-    -- Store reference to gear display
-    mainFrame.gearEditBox = gearEditBox
+        -- Text mode toggle (positioned inside gear panel, moved up)
+        local textToggle = AceGUI:Create("CheckBox")
+        textToggle:SetLabel("Text Mode")
+        textToggle:SetValue(not visualMode) -- Inverted: checked when visual mode is false
+        textToggle:SetWidth(120)
+        textToggle:SetCallback("OnValueChanged", function(widget, event, value)
+            self:ToggleVisualMode(not value) -- Invert the value since this is "Text Mode"
+        end)
+        textToggle.frame:SetPoint("TOPRIGHT", gearPanel.frame, "TOPRIGHT", -180, 5)
+        gearPanel:AddChild(textToggle)
+        mainFrame.textToggle = textToggle
 
-    -- Control buttons - positioned manually
-    local refreshButton = AceGUI:Create("Button")
-    refreshButton:SetText("Inspect")
-    refreshButton:SetWidth(80)
-    refreshButton:SetCallback("OnClick", function()
-        self:RefreshCurrentGear()
-    end)
-    refreshButton.frame:SetPoint("BOTTOMLEFT", container.frame, "BOTTOMLEFT", 230, 10)
-    container:AddChild(refreshButton)
-    mainFrame.inspectButton = refreshButton
+        -- Gear display inside the gear panel (much narrower and taller)
+        local gearEditBox = AceGUI:Create("MultiLineEditBox")
+        gearEditBox:SetWidth(585)
+        gearEditBox:SetHeight(360)
+        gearEditBox:DisableButton(true)
+        gearEditBox.frame:SetPoint("TOPLEFT", gearPanel.frame, "TOPLEFT", 10, -35)
+        gearEditBox.frame:SetPoint("BOTTOMRIGHT", gearPanel.frame, "BOTTOMRIGHT", -10, 50)
+        gearPanel:AddChild(gearEditBox)
 
-    local settingsButton = AceGUI:Create("Button")
-    settingsButton:SetText("Settings")
-    settingsButton:SetWidth(100)
-    settingsButton:SetCallback("OnClick", function()
-        self:ShowSettingsWindow()
-    end)
-    settingsButton.frame:SetPoint("LEFT", refreshButton.frame, "RIGHT", 10, 0)
-    container:AddChild(settingsButton)
+        -- Store reference to gear display and gear panel
+        mainFrame.gearEditBox = gearEditBox
+        mainFrame.gearPanel = gearPanel
 
-    -- Credit text with version - right aligned with buttons
-    local creditText = AceGUI:Create("Label")
-    local version = self.version or "Unknown"
-    creditText:SetText("|cff808080Made with <3 by Bunnycrits (v" .. version .. ")|r")
-    creditText:SetWidth(300)
-    creditText.frame:SetPoint("BOTTOMRIGHT", container.frame, "BOTTOMRIGHT", -20, 10) -- Same height as buttons
-    container:AddChild(creditText)
+        -- Control buttons inside gear panel
+        local refreshButton = AceGUI:Create("Button")
+        refreshButton:SetText("Inspect")
+        refreshButton:SetWidth(80)
+        refreshButton:SetCallback("OnClick", function()
+            self:RefreshCurrentGear()
+        end)
+        refreshButton.frame:SetPoint("BOTTOMLEFT", gearPanel.frame, "BOTTOMLEFT", 10, 10)
+        gearPanel:AddChild(refreshButton)
+        mainFrame.inspectButton = refreshButton
 
-    -- Initialize display
-    self:RefreshMainWindow()
+        local settingsButton = AceGUI:Create("Button")
+        settingsButton:SetText("Settings")
+        settingsButton:SetWidth(100)
+        settingsButton:SetCallback("OnClick", function()
+            self:ShowSettingsWindow()
+        end)
+        settingsButton.frame:SetPoint("LEFT", refreshButton.frame, "RIGHT", 10, 0)
+        gearPanel:AddChild(settingsButton)
+
+        -- Credit text with version - right aligned inside gear panel
+        local creditText = AceGUI:Create("Label")
+        local version = self.version or "Unknown"
+        creditText:SetText("|cff808080Made with <3 by Bunnycrits (v" .. version .. ")|r")
+        creditText:SetWidth(300)
+        creditText.frame:SetPoint("BOTTOMRIGHT", gearPanel.frame, "BOTTOMRIGHT", -10, 10)
+        gearPanel:AddChild(creditText)
+
+        -- Initialize display
+        self:RefreshMainWindow()
     end)
 
     if not success then
@@ -617,20 +622,14 @@ function GearLister:RefreshGearDisplay()
             local entryB = gearHistory[comparisonIndexB]
 
             if entryA and entryB then
-                -- Create side-by-side visual displays using the container frame as parent
-                local containerFrame = nil
-                for i, child in ipairs(mainFrame.children) do
-                    if child.frame and child.frame:GetObjectType() == "Frame" then
-                        containerFrame = child.frame
-                        break
-                    end
-                end
+                -- Create side-by-side visual displays using the stored gear panel frame
+                local gearPanelFrame = mainFrame.gearPanel and mainFrame.gearPanel.frame
 
-                if containerFrame then
+                if gearPanelFrame then
                     -- Pass comparison data to highlight differences
-                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(containerFrame, entryA.items, 250, -60,
+                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(gearPanelFrame, entryA.items, 50, -60,
                         entryB.items)
-                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(containerFrame, entryB.items, 450, -60,
+                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(gearPanelFrame, entryB.items, 250, -60,
                         entryA.items)
 
                     -- Add character labels
@@ -701,17 +700,11 @@ function GearLister:RefreshGearDisplay()
             end
 
             if #items > 0 then
-                -- Find the container frame to attach to
-                local containerFrame = nil
-                for i, child in ipairs(mainFrame.children) do
-                    if child.frame and child.frame:GetObjectType() == "Frame" then
-                        containerFrame = child.frame
-                        break
-                    end
-                end
+                -- Use the stored gear panel frame
+                local gearPanelFrame = mainFrame.gearPanel and mainFrame.gearPanel.frame
 
-                if containerFrame then
-                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(containerFrame, items, 350, -60)
+                if gearPanelFrame then
+                    mainFrame.visualDisplaySingle = self:CreateVisualGearDisplay(gearPanelFrame, items, 150, -60)
 
                     -- Add character label
                     local label = mainFrame.visualDisplaySingle:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -1224,139 +1217,139 @@ function GearLister:ShowSettingsWindow()
     -- Protected settings window creation
     local success, error = pcall(function()
         settingsFrame = AceGUI:Create("Frame")
-    settingsFrame:SetTitle("GearLister Settings")
-    settingsFrame:SetWidth(400)
-    settingsFrame:SetHeight(350)
-    settingsFrame:SetLayout("Flow")
+        settingsFrame:SetTitle("GearLister Settings")
+        settingsFrame:SetWidth(400)
+        settingsFrame:SetHeight(350)
+        settingsFrame:SetLayout("Flow")
 
-    -- Force settings window to always be on top with solid background
-    settingsFrame.frame:SetAlpha(1.0)
-    settingsFrame.frame:SetFrameStrata("FULLSCREEN_DIALOG")
-    settingsFrame.frame:SetFrameLevel(200)
-    
-    -- Enable Escape key functionality for settings window
-    settingsFrame.frame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            settingsFrame:Hide()
-            -- Stop propagation to prevent WoW main menu from opening
-            return
-        end
-        -- Allow other keys to propagate normally
-        self:SetPropagateKeyboardInput(true)
-    end)
-    settingsFrame.frame:SetPropagateKeyboardInput(false) -- Default to false, enable per-key
-    settingsFrame.frame:EnableKeyboard(true)
+        -- Force settings window to always be on top with solid background
+        settingsFrame.frame:SetAlpha(1.0)
+        settingsFrame.frame:SetFrameStrata("FULLSCREEN_DIALOG")
+        settingsFrame.frame:SetFrameLevel(200)
 
-    -- Create a solid black background
-    if not settingsFrame.frame.solidBG then
-        settingsFrame.frame.solidBG = settingsFrame.frame:CreateTexture(nil, "BACKGROUND")
-        settingsFrame.frame.solidBG:SetAllPoints(settingsFrame.frame)
-        settingsFrame.frame.solidBG:SetColorTexture(0, 0, 0, 1) -- Solid black
-    end
-
-    settingsFrame:SetCallback("OnClose", function(widget)
-        widget:Hide()
-        widget:Release()
-        settingsFrame = nil
-    end)
-
-    -- Ensure it always stays on top
-    settingsFrame:SetCallback("OnShow", function(widget)
-        widget.frame:SetFrameStrata("FULLSCREEN_DIALOG")
-        widget.frame:SetFrameLevel(200)
-        widget.frame:Raise()
-    end)
-
-    -- Force raise when main window is shown
-    if mainFrame then
-        mainFrame:SetCallback("OnShow", function(widget)
-            if settingsFrame and settingsFrame:IsShown() then
-                settingsFrame.frame:Raise()
+        -- Enable Escape key functionality for settings window
+        settingsFrame.frame:SetScript("OnKeyDown", function(self, key)
+            if key == "ESCAPE" then
+                settingsFrame:Hide()
+                -- Stop propagation to prevent WoW main menu from opening
+                return
             end
+            -- Allow other keys to propagate normally
+            self:SetPropagateKeyboardInput(true)
         end)
-    end
+        settingsFrame.frame:SetPropagateKeyboardInput(false) -- Default to false, enable per-key
+        settingsFrame.frame:EnableKeyboard(true)
 
-    -- Delimiter setting
-    local delimiterLabel = AceGUI:Create("Label")
-    delimiterLabel:SetText("Delimiter between item name and Wowhead link:")
-    delimiterLabel:SetFullWidth(true)
-    settingsFrame:AddChild(delimiterLabel)
+        -- Create a solid black background
+        if not settingsFrame.frame.solidBG then
+            settingsFrame.frame.solidBG = settingsFrame.frame:CreateTexture(nil, "BACKGROUND")
+            settingsFrame.frame.solidBG:SetAllPoints(settingsFrame.frame)
+            settingsFrame.frame.solidBG:SetColorTexture(0, 0, 0, 1) -- Solid black
+        end
 
-    local delimiterInput = AceGUI:Create("EditBox")
-    delimiterInput:SetText(self.db.profile.settings.delimiter)
-    delimiterInput:SetFullWidth(true)
-    delimiterInput:SetCallback("OnTextChanged", function(widget, event, text)
+        settingsFrame:SetCallback("OnClose", function(widget)
+            widget:Hide()
+            widget:Release()
+            settingsFrame = nil
+        end)
+
+        -- Ensure it always stays on top
+        settingsFrame:SetCallback("OnShow", function(widget)
+            widget.frame:SetFrameStrata("FULLSCREEN_DIALOG")
+            widget.frame:SetFrameLevel(200)
+            widget.frame:Raise()
+        end)
+
+        -- Force raise when main window is shown
+        if mainFrame then
+            mainFrame:SetCallback("OnShow", function(widget)
+                if settingsFrame and settingsFrame:IsShown() then
+                    settingsFrame.frame:Raise()
+                end
+            end)
+        end
+
+        -- Delimiter setting
+        local delimiterLabel = AceGUI:Create("Label")
+        delimiterLabel:SetText("Delimiter between item name and Wowhead link:")
+        delimiterLabel:SetFullWidth(true)
+        settingsFrame:AddChild(delimiterLabel)
+
+        local delimiterInput = AceGUI:Create("EditBox")
+        delimiterInput:SetText(self.db.profile.settings.delimiter)
+        delimiterInput:SetFullWidth(true)
+        delimiterInput:SetCallback("OnTextChanged", function(widget, event, text)
+            self:UpdateSettingsExample()
+        end)
+        settingsFrame:AddChild(delimiterInput)
+        settingsFrame.delimiterInput = delimiterInput
+
+        -- Newline checkbox
+        local newlineCheckbox = AceGUI:Create("CheckBox")
+        newlineCheckbox:SetLabel("Add newline after delimiter")
+        newlineCheckbox:SetValue(self.db.profile.settings.addNewline)
+        newlineCheckbox:SetFullWidth(true)
+        newlineCheckbox:SetCallback("OnValueChanged", function(widget, event, value)
+            self:UpdateSettingsExample()
+        end)
+        settingsFrame:AddChild(newlineCheckbox)
+        settingsFrame.newlineCheckbox = newlineCheckbox
+
+        -- Max history entries
+        local maxEntriesLabel = AceGUI:Create("Label")
+        maxEntriesLabel:SetText("Maximum history entries:")
+        maxEntriesLabel:SetFullWidth(true)
+        settingsFrame:AddChild(maxEntriesLabel)
+
+        local maxEntriesInput = AceGUI:Create("EditBox")
+        maxEntriesInput:SetText(tostring(self.db.profile.settings.maxHistoryEntries))
+        maxEntriesInput:SetFullWidth(true)
+        settingsFrame:AddChild(maxEntriesInput)
+        settingsFrame.maxEntriesInput = maxEntriesInput
+
+        -- Example text
+        local exampleLabel = AceGUI:Create("Label")
+        exampleLabel:SetFullWidth(true)
+        settingsFrame:AddChild(exampleLabel)
+        settingsFrame.exampleLabel = exampleLabel
+
+        -- Update example initially
         self:UpdateSettingsExample()
-    end)
-    settingsFrame:AddChild(delimiterInput)
-    settingsFrame.delimiterInput = delimiterInput
 
-    -- Newline checkbox
-    local newlineCheckbox = AceGUI:Create("CheckBox")
-    newlineCheckbox:SetLabel("Add newline after delimiter")
-    newlineCheckbox:SetValue(self.db.profile.settings.addNewline)
-    newlineCheckbox:SetFullWidth(true)
-    newlineCheckbox:SetCallback("OnValueChanged", function(widget, event, value)
-        self:UpdateSettingsExample()
-    end)
-    settingsFrame:AddChild(newlineCheckbox)
-    settingsFrame.newlineCheckbox = newlineCheckbox
+        -- Buttons
+        local buttonGroup = AceGUI:Create("SimpleGroup")
+        buttonGroup:SetFullWidth(true)
+        buttonGroup:SetLayout("Flow")
+        settingsFrame:AddChild(buttonGroup)
 
-    -- Max history entries
-    local maxEntriesLabel = AceGUI:Create("Label")
-    maxEntriesLabel:SetText("Maximum history entries:")
-    maxEntriesLabel:SetFullWidth(true)
-    settingsFrame:AddChild(maxEntriesLabel)
+        local saveButton = AceGUI:Create("Button")
+        saveButton:SetText("Save")
+        saveButton:SetWidth(100)
+        saveButton:SetCallback("OnClick", function()
+            self:SaveSettings()
+        end)
+        buttonGroup:AddChild(saveButton)
 
-    local maxEntriesInput = AceGUI:Create("EditBox")
-    maxEntriesInput:SetText(tostring(self.db.profile.settings.maxHistoryEntries))
-    maxEntriesInput:SetFullWidth(true)
-    settingsFrame:AddChild(maxEntriesInput)
-    settingsFrame.maxEntriesInput = maxEntriesInput
+        local cancelButton = AceGUI:Create("Button")
+        cancelButton:SetText("Cancel")
+        cancelButton:SetWidth(100)
+        cancelButton:SetCallback("OnClick", function()
+            settingsFrame:Hide()
+            settingsFrame:Release()
+            settingsFrame = nil
+        end)
+        buttonGroup:AddChild(cancelButton)
 
-    -- Example text
-    local exampleLabel = AceGUI:Create("Label")
-    exampleLabel:SetFullWidth(true)
-    settingsFrame:AddChild(exampleLabel)
-    settingsFrame.exampleLabel = exampleLabel
-
-    -- Update example initially
-    self:UpdateSettingsExample()
-
-    -- Buttons
-    local buttonGroup = AceGUI:Create("SimpleGroup")
-    buttonGroup:SetFullWidth(true)
-    buttonGroup:SetLayout("Flow")
-    settingsFrame:AddChild(buttonGroup)
-
-    local saveButton = AceGUI:Create("Button")
-    saveButton:SetText("Save")
-    saveButton:SetWidth(100)
-    saveButton:SetCallback("OnClick", function()
-        self:SaveSettings()
-    end)
-    buttonGroup:AddChild(saveButton)
-
-    local cancelButton = AceGUI:Create("Button")
-    cancelButton:SetText("Cancel")
-    cancelButton:SetWidth(100)
-    cancelButton:SetCallback("OnClick", function()
-        settingsFrame:Hide()
-        settingsFrame:Release()
-        settingsFrame = nil
-    end)
-    buttonGroup:AddChild(cancelButton)
-
-    local resetButton = AceGUI:Create("Button")
-    resetButton:SetText("Reset")
-    resetButton:SetWidth(100)
-    resetButton:SetCallback("OnClick", function()
-        delimiterInput:SetText(" - ")
-        newlineCheckbox:SetValue(false)
-        maxEntriesInput:SetText("50")
-        self:UpdateSettingsExample()
-    end)
-    buttonGroup:AddChild(resetButton)
+        local resetButton = AceGUI:Create("Button")
+        resetButton:SetText("Reset")
+        resetButton:SetWidth(100)
+        resetButton:SetCallback("OnClick", function()
+            delimiterInput:SetText(" - ")
+            newlineCheckbox:SetValue(false)
+            maxEntriesInput:SetText("50")
+            self:UpdateSettingsExample()
+        end)
+        buttonGroup:AddChild(resetButton)
     end)
 
     if not success then
