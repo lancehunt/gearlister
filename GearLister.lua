@@ -734,9 +734,9 @@ function GearLister:RefreshGearDisplay()
                     end
                     labelB:SetText("|cff0099ff" .. labelTextB .. "|r")
 
-                    -- Add legend at the bottom
-                    local legend = containerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                    legend:SetPoint("BOTTOM", containerFrame, "BOTTOM", 0, 65) -- Positioned above buttons with more clearance
+                    -- Add legend at the bottom (attach to gear panel frame)
+                    local legend = gearPanelFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                    legend:SetPoint("BOTTOM", gearPanelFrame, "BOTTOM", 0, 65) -- Positioned above buttons with more clearance
                     legend:SetText("|cff808080Grey: Same Items|r")
 
                     titleSuffix = " - Visual Comparison: " .. entryA.characterName .. " vs " .. entryB.characterName
@@ -1010,10 +1010,18 @@ function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, com
                 local itemLinkB = string.match(comparisonData, "(|c%x+|Hitem:[^|]+|h[^|]+|h|r)")
 
                 if itemLinkA and itemLinkB then
-                    local nameA = string.match(itemLinkA, "|h([^|]+)|h")
-                    local nameB = string.match(itemLinkB, "|h([^|]+)|h")
-                    isMatching = (nameA == nameB)
-                    isDifferent = not isMatching
+                    local idA = self:GetItemIdFromLink(itemLinkA)
+                    local idB = self:GetItemIdFromLink(itemLinkB)
+                    if idA and idB then
+                        isMatching = (tonumber(idA) == tonumber(idB))
+                        isDifferent = not isMatching
+                    else
+                        -- Fallback to name compare only if IDs unavailable
+                        local nameA = string.match(itemLinkA, "|h([^|]+)|h")
+                        local nameB = string.match(itemLinkB, "|h([^|]+)|h")
+                        isMatching = (nameA == nameB)
+                        isDifferent = not isMatching
+                    end
                 end
             elseif itemData and not comparisonData then
                 -- This character has item, other doesn't
@@ -1202,7 +1210,13 @@ function GearLister:CompareGearSets(entryA, entryB)
             -- Try to extract from item link first, then fall back to plain text
             local linkA = string.match(itemA, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
             if linkA then
-                nameA = string.match(linkA, "|h([^|]+)|h")
+                -- Prefer itemID comparison to avoid false mismatches
+                local idA = self:GetItemIdFromLink(linkA)
+                if idA then
+                    nameA = idA -- temporarily store ID in nameA; used only for equality check below
+                else
+                    nameA = string.match(linkA, "|h([^|]+)|h")
+                end
             else
                 nameA = string.match(itemA,
                     slotName ..
@@ -1211,7 +1225,12 @@ function GearLister:CompareGearSets(entryA, entryB)
 
             local linkB = string.match(itemB, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
             if linkB then
-                nameB = string.match(linkB, "|h([^|]+)|h")
+                local idB = self:GetItemIdFromLink(linkB)
+                if idB then
+                    nameB = idB
+                else
+                    nameB = string.match(linkB, "|h([^|]+)|h")
+                end
             else
                 nameB = string.match(itemB,
                     slotName ..
@@ -1219,7 +1238,7 @@ function GearLister:CompareGearSets(entryA, entryB)
             end
 
             if nameA and nameB then
-                if nameA == nameB then
+                if tostring(nameA) == tostring(nameB) then
                     -- Same item - skip entirely as requested
                     -- (no output for identical items)
                 else
@@ -1230,7 +1249,8 @@ function GearLister:CompareGearSets(entryA, entryB)
                     -- Extract item ID and create Wowhead link for item A
                     local itemIdA = linkA and self:GetItemIdFromLink(linkA) or nil
                     local wowheadA = itemIdA and ("https://classic.wowhead.com/item=" .. itemIdA) or ""
-                    comparisonText = comparisonText .. "  |cff00ff00A: " .. nameA
+                    local displayNameA = (linkA and string.match(linkA, "|h([^|]+)|h")) or tostring(nameA)
+                    comparisonText = comparisonText .. "  |cff00ff00A: " .. displayNameA
                     if wowheadA ~= "" then
                         comparisonText = comparisonText .. delimiter .. wowheadA
                     end
@@ -1239,7 +1259,8 @@ function GearLister:CompareGearSets(entryA, entryB)
                     -- Extract item ID and create Wowhead link for item B
                     local itemIdB = linkB and self:GetItemIdFromLink(linkB) or nil
                     local wowheadB = itemIdB and ("https://classic.wowhead.com/item=" .. itemIdB) or ""
-                    comparisonText = comparisonText .. "  |cff0099ffB: " .. nameB
+                    local displayNameB = (linkB and string.match(linkB, "|h([^|]+)|h")) or tostring(nameB)
+                    comparisonText = comparisonText .. "  |cff0099ffB: " .. displayNameB
                     if wowheadB ~= "" then
                         comparisonText = comparisonText .. delimiter .. wowheadB
                     end
@@ -1564,7 +1585,7 @@ function GearLister:SlashProcessor(input)
         self:Print("|cffff0000GearLister is not fully loaded yet. Please try again in a moment.|r")
         return
     end
-    local command = string.lower(string.trim(input or ""))
+    local command = string.lower(strtrim(input or ""))
 
     if command == "inspect" then
         if self:StartInspect() then
