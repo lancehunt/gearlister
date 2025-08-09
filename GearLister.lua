@@ -13,6 +13,30 @@ local function SafeLibStub(lib)
     end
 end
 
+-- Migration: rekey characterHistory to name-realm keys and set schemaVersion
+function GearLister:MigrateNameRealmKeys()
+    local profile = self.db and self.db.profile
+    if not profile then return end
+    local ver = profile.schemaVersion or 0
+    if ver >= 2 then return end
+
+    local newTable = {}
+    for key, history in pairs(profile.characterHistory or {}) do
+        -- Detect if key likely misses realm (no dash)
+        if type(key) == "string" and not string.find(key, "-") then
+            -- Assume this is current character if names match; otherwise preserve under old key
+            local n, r = UnitFullName("player")
+            local currentKey = n and (r and (n .. "-" .. r) or n) or key
+            local destKey = (n == key) and currentKey or key
+            newTable[destKey] = history
+        else
+            newTable[key] = history
+        end
+    end
+    profile.characterHistory = newTable
+    profile.schemaVersion = 2
+end
+
 local AceAddon = SafeLibStub("AceAddon-3.0")
 local AceGUI = SafeLibStub("AceGUI-3.0")
 local AceDB = SafeLibStub("AceDB-3.0")
@@ -42,6 +66,7 @@ end
 -- Default database structure
 local defaults = {
     profile = {
+        schemaVersion = 1,
         settings = {
             delimiter = " - ",
             addNewline = false,
@@ -118,7 +143,8 @@ function GearLister:OnInitialize()
         -- Initialize database
         self.db = AceDB:New("GearListerDB", defaults, true)
 
-        -- Migrate legacy history data to character-specific storage
+        -- Schema/data migrations
+        self:MigrateNameRealmKeys()
         self:MigrateLegacyHistory()
 
         -- Register slash commands
@@ -255,7 +281,8 @@ end
 
 -- Get the current character's history, creating it if it doesn't exist
 function GearLister:GetCurrentCharacterHistory()
-    local currentChar = UnitName("player")
+    local name, realm = UnitFullName("player")
+    local currentChar = name and (realm and (name .. "-" .. realm) or name) or nil
     if not currentChar then return {} end
 
     if not self.db.profile.characterHistory[currentChar] then
@@ -270,7 +297,8 @@ function GearLister:MigrateLegacyHistory()
     local legacyHistory = self.db.profile.gearHistory
     if not legacyHistory or #legacyHistory == 0 then return end
 
-    local currentChar = UnitName("player")
+    local n, r = UnitFullName("player")
+    local currentChar = n and (r and (n .. "-" .. r) or n) or UnitName("player")
     if not currentChar then return end
 
     -- All legacy history goes to the current character (who viewed it)
@@ -293,7 +321,8 @@ end
 function GearLister:SaveToHistory(characterName, items, level, race, class, slotItems)
     local gearHash = slotItems and self:CreateGearHashFromSlots(slotItems) or self:CreateGearHash(items)
     local timestamp = date("%Y-%m-%d %H:%M:%S")
-    local currentChar = UnitName("player")
+    local viewerName, viewerRealm = UnitFullName("player")
+    local currentChar = viewerName and (viewerRealm and (viewerName .. "-" .. viewerRealm) or viewerName) or nil
 
     -- Get the current character's history
     local gearHistory = self:GetCurrentCharacterHistory()
@@ -339,7 +368,10 @@ end
 
 function GearLister:GetCurrentTargetName()
     if inspectMode and UnitExists("target") and UnitIsPlayer("target") then
-        return UnitName("target")
+        local name, realm = UnitFullName("target")
+        if name then
+            return realm and (name .. "-" .. realm) or name
+        end
     end
     return nil
 end
@@ -381,7 +413,10 @@ function GearLister:StartInspect()
 
     -- Set inspect mode and capture current target name
     inspectMode = true
-    inspectTarget = UnitName("target")
+    do
+        local name, realm = UnitFullName("target")
+        inspectTarget = name and (realm and (name .. "-" .. realm) or name) or UnitName("target")
+    end
 
     -- Start the inspect
     InspectUnit("target")
@@ -833,7 +868,10 @@ function GearLister:RefreshGearDisplay()
             else
                 -- Current gear
                 local targetUnit = "player"
-                characterName = UnitName("player")
+                do
+                    local n, r = UnitFullName("player")
+                    characterName = n and (r and (n .. "-" .. r) or n) or UnitName("player")
+                end
 
                 if inspectMode then
                     local currentTarget = self:GetCurrentTargetName()
@@ -955,7 +993,11 @@ function GearLister:RefreshGearDisplay()
         else
             -- Show current gear
             local targetUnit = "player"
-            local characterName = UnitName("player")
+            local characterName
+            do
+                local n, r = UnitFullName("player")
+                characterName = n and (r and (n .. "-" .. r) or n) or UnitName("player")
+            end
 
             if inspectMode then
                 local currentTarget = self:GetCurrentTargetName()
