@@ -22,9 +22,7 @@ function GearLister:MigrateNameRealmKeys()
 
     local newTable = {}
     for key, history in pairs(profile.characterHistory or {}) do
-        -- Detect if key likely misses realm (no dash)
         if type(key) == "string" and not string.find(key, "-") then
-            -- Assume this is current character if names match; otherwise preserve under old key
             local playerKey = self:GetNameRealmForUnit("player") or key
             local playerNameOnly = playerKey:match("^[^-]+")
             local destKey = (playerNameOnly == key) and playerKey or key
@@ -36,6 +34,8 @@ function GearLister:MigrateNameRealmKeys()
     profile.characterHistory = newTable
     profile.schemaVersion = 2
 end
+
+-- (moved below after addon is created)
 
 local AceAddon = SafeLibStub("AceAddon-3.0")
 local AceGUI = SafeLibStub("AceGUI-3.0")
@@ -143,9 +143,8 @@ function GearLister:OnInitialize()
         -- Initialize database
         self.db = AceDB:New("GearListerDB", defaults, true)
 
-        -- Schema/data migrations
-        self:MigrateNameRealmKeys()
-        self:MigrateLegacyHistory()
+        -- Schema/data migrations (run after DB init)
+        -- Defer name-realm rekey until after addon is fully enabled to avoid unit API limitations during load
 
         -- Register slash commands
         self:RegisterChatCommand("gear", "SlashProcessor")
@@ -168,6 +167,14 @@ end
 
 function GearLister:OnEnable()
     -- Addon enabled
+    -- Safe point to perform migrations that may read unit/realm names
+    if self.db and self.db.profile then
+        if (self.db.profile.schemaVersion or 0) < 2 then
+            self:MigrateNameRealmKeys()
+        end
+        -- Always attempt legacy migration once per session
+        self:MigrateLegacyHistory()
+    end
 end
 
 function GearLister:OnDisable()
