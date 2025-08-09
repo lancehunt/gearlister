@@ -25,9 +25,9 @@ function GearLister:MigrateNameRealmKeys()
         -- Detect if key likely misses realm (no dash)
         if type(key) == "string" and not string.find(key, "-") then
             -- Assume this is current character if names match; otherwise preserve under old key
-            local n, r = UnitFullName("player")
-            local currentKey = n and (r and (n .. "-" .. r) or n) or key
-            local destKey = (n == key) and currentKey or key
+            local playerKey = self:GetNameRealmForUnit("player") or key
+            local playerNameOnly = playerKey:match("^[^-]+")
+            local destKey = (playerNameOnly == key) and playerKey or key
             newTable[destKey] = history
         else
             newTable[key] = history
@@ -189,6 +189,25 @@ function GearLister:GetItemIdFromLink(itemLink)
     return itemId
 end
 
+-- Return "Name-Realm" (or just Name) for a unit, Classic-safe
+function GearLister:GetNameRealmForUnit(unit)
+    local name, realm
+    if UnitFullName then
+        name, realm = UnitFullName(unit)
+    else
+        -- Classic fallback: UnitName returns name, realm in second result on cross-realm
+        name, realm = UnitName(unit)
+    end
+    if unit == "player" and (realm == nil or realm == "") and GetRealmName then
+        realm = GetRealmName()
+    end
+    if not name or name == "" then return nil end
+    if realm and realm ~= "" then
+        return name .. "-" .. realm
+    end
+    return name
+end
+
 function GearLister:GetActualDelimiter()
     local settings = self.db.profile.settings
     local delimiter = settings.delimiter
@@ -281,8 +300,7 @@ end
 
 -- Get the current character's history, creating it if it doesn't exist
 function GearLister:GetCurrentCharacterHistory()
-    local name, realm = UnitFullName("player")
-    local currentChar = name and (realm and (name .. "-" .. realm) or name) or nil
+    local currentChar = self:GetNameRealmForUnit("player")
     if not currentChar then return {} end
 
     if not self.db.profile.characterHistory[currentChar] then
@@ -321,8 +339,7 @@ end
 function GearLister:SaveToHistory(characterName, items, level, race, class, slotItems)
     local gearHash = slotItems and self:CreateGearHashFromSlots(slotItems) or self:CreateGearHash(items)
     local timestamp = date("%Y-%m-%d %H:%M:%S")
-    local viewerName, viewerRealm = UnitFullName("player")
-    local currentChar = viewerName and (viewerRealm and (viewerName .. "-" .. viewerRealm) or viewerName) or nil
+    local currentChar = self:GetNameRealmForUnit("player")
 
     -- Get the current character's history
     local gearHistory = self:GetCurrentCharacterHistory()
@@ -368,10 +385,7 @@ end
 
 function GearLister:GetCurrentTargetName()
     if inspectMode and UnitExists("target") and UnitIsPlayer("target") then
-        local name, realm = UnitFullName("target")
-        if name then
-            return realm and (name .. "-" .. realm) or name
-        end
+        return self:GetNameRealmForUnit("target")
     end
     return nil
 end
@@ -413,10 +427,7 @@ function GearLister:StartInspect()
 
     -- Set inspect mode and capture current target name
     inspectMode = true
-    do
-        local name, realm = UnitFullName("target")
-        inspectTarget = name and (realm and (name .. "-" .. realm) or name) or UnitName("target")
-    end
+    inspectTarget = self:GetNameRealmForUnit("target") or UnitName("target")
 
     -- Start the inspect
     InspectUnit("target")
@@ -868,10 +879,7 @@ function GearLister:RefreshGearDisplay()
             else
                 -- Current gear
                 local targetUnit = "player"
-                do
-                    local n, r = UnitFullName("player")
-                    characterName = n and (r and (n .. "-" .. r) or n) or UnitName("player")
-                end
+                characterName = self:GetNameRealmForUnit("player") or UnitName("player")
 
                 if inspectMode then
                     local currentTarget = self:GetCurrentTargetName()
@@ -993,11 +1001,7 @@ function GearLister:RefreshGearDisplay()
         else
             -- Show current gear
             local targetUnit = "player"
-            local characterName
-            do
-                local n, r = UnitFullName("player")
-                characterName = n and (r and (n .. "-" .. r) or n) or UnitName("player")
-            end
+            local characterName = self:GetNameRealmForUnit("player") or UnitName("player")
 
             if inspectMode then
                 local currentTarget = self:GetCurrentTargetName()
