@@ -457,6 +457,10 @@ function GearLister:OnInspectReady()
         if currentTarget and currentTarget == inspectTarget then
             -- Small delay to ensure all data is loaded
             C_Timer.After(0.5, function()
+                -- When comparison mode is enabled but not fully selected, show current target immediately
+                if comparisonMode and not (comparisonIndexA and comparisonIndexB) then
+                    currentHistoryIndex = nil
+                end
                 self:ShowMainWindow()
             end)
         else
@@ -920,8 +924,8 @@ function GearLister:RefreshGearDisplay()
                 local itemsText, slotItems = self:CollectEquippedItems(targetUnit)
                 items = itemsText
 
-                -- Auto-save current gear to history (but not in comparison mode)
-                if characterName and not comparisonMode then
+                -- Auto-save current gear when not actively comparing two entries
+                if characterName and not (comparisonMode and comparisonIndexA and comparisonIndexB) then
                     self:SaveToHistory(characterName, items, level, race, class, slotItems)
                 end
             end
@@ -986,6 +990,13 @@ function GearLister:RefreshGearDisplay()
                 end
             end
             titleSuffix = " - Comparison Mode"
+        elseif inspectMode then
+            -- If we’re inspecting a target while comparison mode is on but not fully selected,
+            -- show current target’s gear to avoid confusion
+            local itemsText, slotItems = self:CollectEquippedItems("target")
+            if #itemsText > 0 then
+                gearText = table.concat(itemsText, "\n")
+            end
         elseif currentHistoryIndex then
             -- Show history entry
             local gearHistory = self:GetCurrentCharacterHistory()
