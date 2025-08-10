@@ -13,6 +13,10 @@ local function SafeLibStub(lib)
     end
 end
 
+
+
+-- (moved below after addon is created)
+
 local AceAddon = SafeLibStub("AceAddon-3.0")
 local AceGUI = SafeLibStub("AceGUI-3.0")
 local AceDB = SafeLibStub("AceDB-3.0")
@@ -42,6 +46,7 @@ end
 -- Default database structure
 local defaults = {
     profile = {
+        schemaVersion = 1,
         settings = {
             delimiter = " - ",
             addNewline = false,
@@ -52,28 +57,50 @@ local defaults = {
     }
 }
 
--- Equipment slot IDs for Classic WoW mapped to slot names
-local EQUIPMENT_SLOTS = {
-    [1] = "Head",
-    [2] = "Neck",
-    [3] = "Shoulders",
-    [4] = "Shirt",
-    [5] = "Chest",
-    [6] = "Belt",
-    [7] = "Legs",
-    [8] = "Feet",
-    [9] = "Wrist",
-    [10] = "Gloves",
-    [11] = "Ring1",
-    [12] = "Ring2",
-    [13] = "Trinket1",
-    [14] = "Trinket2",
-    [15] = "Back",
-    [16] = "Main Hand",
-    [17] = "Off Hand",
-    [18] = "Ranged",
-    [19] = "Tabard"
-}
+-- Migration: rekey characterHistory to name-realm keys and set schemaVersion
+function GearLister:MigrateNameRealmKeys()
+    local profile = self.db and self.db.profile
+    if not profile then return end
+    local ver = profile.schemaVersion or 0
+    if ver >= 2 then return end
+
+    local newTable = {}
+    for key, history in pairs(profile.characterHistory or {}) do
+        if type(key) == "string" and not string.find(key, "-") then
+            local playerKey = self:GetNameRealmForUnit("player") or key
+            local playerNameOnly = playerKey:match("^[^-]+")
+            local destKey = (playerNameOnly == key) and playerKey or key
+            newTable[destKey] = history
+        else
+            newTable[key] = history
+        end
+    end
+    profile.characterHistory = newTable
+    profile.schemaVersion = 2
+end
+
+-- -- Equipment slot IDs for Classic WoW mapped to slot names
+-- local EQUIPMENT_SLOTS = {
+--     [1] = "Head",
+--     [2] = "Neck",
+--     [3] = "Shoulders",
+--     [4] = "Shirt",
+--     [5] = "Chest",
+--     [6] = "Belt",
+--     [7] = "Legs",
+--     [8] = "Feet",
+--     [9] = "Wrist",
+--     [10] = "Gloves",
+--     [11] = "Ring1",
+--     [12] = "Ring2",
+--     [13] = "Trinket1",
+--     [14] = "Trinket2",
+--     [15] = "Back",
+--     [16] = "Main Hand",
+--     [17] = "Off Hand",
+--     [18] = "Ranged",
+--     [19] = "Tabard"
+-- }
 
 -- Ordered list for display (excluding Shirt and Tabard as they're not combat gear)
 local DISPLAY_ORDER = {
@@ -105,7 +132,7 @@ local currentHistoryIndex = nil
 local comparisonMode = false
 local comparisonIndexA = nil
 local comparisonIndexB = nil
-local visualMode = true -- Changed default to true (Visual Mode is default)
+local visualMode = true     -- Changed default to true (Visual Mode is default)
 local pendingItemLoads = {} -- Track items that are being loaded to avoid excessive refreshes
 
 function GearLister:OnInitialize()
@@ -118,8 +145,8 @@ function GearLister:OnInitialize()
         -- Initialize database
         self.db = AceDB:New("GearListerDB", defaults, true)
 
-        -- Migrate legacy history data to character-specific storage
-        self:MigrateLegacyHistory()
+        -- Schema/data migrations (run after DB init)
+        -- Defer name-realm rekey until after addon is fully enabled to avoid unit API limitations during load
 
         -- Register slash commands
         self:RegisterChatCommand("gear", "SlashProcessor")
@@ -142,6 +169,14 @@ end
 
 function GearLister:OnEnable()
     -- Addon enabled
+    -- Safe point to perform migrations that may read unit/realm names
+    if self.db and self.db.profile then
+        if (self.db.profile.schemaVersion or 0) < 2 then
+            self:MigrateNameRealmKeys()
+        end
+        -- Always attempt legacy migration once per session
+        self:MigrateLegacyHistory()
+    end
 end
 
 function GearLister:OnDisable()
@@ -161,6 +196,25 @@ function GearLister:GetItemIdFromLink(itemLink)
     if not itemLink then return nil end
     local itemId = string.match(itemLink, "item:(%d+)")
     return itemId
+end
+
+-- Return "Name-Realm" (or just Name) for a unit, Classic-safe
+function GearLister:GetNameRealmForUnit(unit)
+    local name, realm
+    if UnitFullName then
+        name, realm = UnitFullName(unit)
+    else
+        -- Classic fallback: UnitName returns name, realm in second result on cross-realm
+        name, realm = UnitName(unit)
+    end
+    if unit == "player" and (realm == nil or realm == "") and GetRealmName then
+        realm = GetRealmName()
+    end
+    if not name or name == "" then return nil end
+    if realm and realm ~= "" then
+        return name .. "-" .. realm
+    end
+    return name
 end
 
 function GearLister:GetActualDelimiter()
@@ -201,13 +255,61 @@ function GearLister:GetEquippedItems(unit)
     return items
 end
 
+-- Collect equipped items, returning both text entries and structured slot data
+function GearLister:CollectEquippedItems(unit)
+    local itemsText = {}
+    local slotItems = {}
+    local targetUnit = unit or "player"
+    local actualDelimiter = self:GetActualDelimiter()
+
+    for _, slotInfo in ipairs(DISPLAY_ORDER) do
+        local slotId = slotInfo.slot
+        local slotName = slotInfo.name
+        local itemLink = GetInventoryItemLink(targetUnit, slotId)
+
+        if itemLink then
+            local itemId = self:GetItemIdFromLink(itemLink)
+            local itemName = GetItemInfo(itemLink) or string.match(itemLink, "|h([^|]+)|h")
+            local wowheadLink = itemId and ("https://classic.wowhead.com/item=" .. itemId) or ""
+
+            table.insert(itemsText, slotName .. ": " .. itemLink .. actualDelimiter .. wowheadLink)
+            slotItems[slotName] = {
+                slotId = slotId,
+                slotName = slotName,
+                itemId = itemId and tonumber(itemId) or nil,
+                itemLink = itemLink,
+                itemName = itemName,
+            }
+        else
+            table.insert(itemsText, slotName .. ": (empty)")
+            slotItems[slotName] = nil
+        end
+    end
+
+    return itemsText, slotItems
+end
+
 function GearLister:CreateGearHash(items)
     return table.concat(items, "|")
 end
 
+-- Create a stable hash from structured slot items using itemIDs in display order
+function GearLister:CreateGearHashFromSlots(slotItems)
+    if not slotItems then return nil end
+    local parts = {}
+    for _, slotInfo in ipairs(DISPLAY_ORDER) do
+        local slotId = slotInfo.slot
+        local slotName = slotInfo.name
+        local entry = slotItems[slotName]
+        local id = (entry and entry.itemId) or 0
+        table.insert(parts, tostring(slotId) .. ":" .. tostring(id))
+    end
+    return table.concat(parts, "|")
+end
+
 -- Get the current character's history, creating it if it doesn't exist
 function GearLister:GetCurrentCharacterHistory()
-    local currentChar = UnitName("player")
+    local currentChar = self:GetNameRealmForUnit("player")
     if not currentChar then return {} end
 
     if not self.db.profile.characterHistory[currentChar] then
@@ -222,7 +324,8 @@ function GearLister:MigrateLegacyHistory()
     local legacyHistory = self.db.profile.gearHistory
     if not legacyHistory or #legacyHistory == 0 then return end
 
-    local currentChar = UnitName("player")
+    local n, r = UnitFullName("player")
+    local currentChar = n and (r and (n .. "-" .. r) or n) or UnitName("player")
     if not currentChar then return end
 
     -- All legacy history goes to the current character (who viewed it)
@@ -242,38 +345,43 @@ function GearLister:MigrateLegacyHistory()
         currentChar .. "'s viewing history (" .. #legacyHistory .. " entries)|r")
 end
 
-function GearLister:SaveToHistory(characterName, items, level, race, class)
-    local gearHash = self:CreateGearHash(items)
+function GearLister:SaveToHistory(characterName, items, level, race, class, slotItems)
+    local gearHash = slotItems and self:CreateGearHashFromSlots(slotItems) or self:CreateGearHash(items)
     local timestamp = date("%Y-%m-%d %H:%M:%S")
-    local currentChar = UnitName("player")
+    local currentChar = self:GetNameRealmForUnit("player")
+    local fullName = characterName
+    local displayName = characterName and tostring(characterName):gsub("%-.*$", "") or characterName
 
     -- Get the current character's history
     local gearHistory = self:GetCurrentCharacterHistory()
 
     -- Check if this exact gear set already exists for this character
     for i, entry in ipairs(gearHistory) do
-        if entry.hash == gearHash and entry.characterName == characterName then
+        local entryIdentity = entry.fullName or entry.characterName
+        if entry.hash == gearHash and entryIdentity == (fullName or characterName) then
             -- Update timestamp and move to front
             entry.timestamp = timestamp
             entry.displayTime = date("%m/%d %H:%M")
             table.remove(gearHistory, i)
             table.insert(gearHistory, 1, entry)
             self:RefreshHistoryList()
-            self:Print("|cffff9900Updating gear for " .. characterName .. " |r")
+            self:Print("|cffff9900Updating gear for " .. (displayName or characterName or "Unknown") .. " |r")
             return
         end
     end
 
     -- Add new entry to the front
     local newEntry = {
-        characterName = characterName,
+        characterName = displayName,
+        fullName = fullName,
         items = items,
         hash = gearHash,
         timestamp = timestamp,
         displayTime = date("%m/%d %H:%M"),
         level = level,
         race = race,
-        class = class
+        class = class,
+        slotItems = slotItems,
     }
     table.insert(gearHistory, 1, newEntry)
 
@@ -285,12 +393,12 @@ function GearLister:SaveToHistory(characterName, items, level, race, class)
 
     -- Force immediate history list refresh
     self:RefreshHistoryList()
-    self:Print("|cff00ff00Saved gear for " .. characterName .. " (viewed by " .. (currentChar or "Unknown") .. ")|r")
+    self:Print("|cff00ff00Saved gear for " .. (displayName or characterName or "Unknown") .. " (viewed by " .. (currentChar or "Unknown") .. ")|r")
 end
 
 function GearLister:GetCurrentTargetName()
     if inspectMode and UnitExists("target") and UnitIsPlayer("target") then
-        return UnitName("target")
+        return self:GetNameRealmForUnit("target")
     end
     return nil
 end
@@ -332,7 +440,7 @@ function GearLister:StartInspect()
 
     -- Set inspect mode and capture current target name
     inspectMode = true
-    inspectTarget = UnitName("target")
+    inspectTarget = self:GetNameRealmForUnit("target") or UnitName("target")
 
     -- Start the inspect
     InspectUnit("target")
@@ -349,6 +457,10 @@ function GearLister:OnInspectReady()
         if currentTarget and currentTarget == inspectTarget then
             -- Small delay to ensure all data is loaded
             C_Timer.After(0.5, function()
+                -- When comparison mode is enabled but not fully selected, show current target immediately
+                if comparisonMode and not (comparisonIndexA and comparisonIndexB) then
+                    currentHistoryIndex = nil
+                end
                 self:ShowMainWindow()
             end)
         else
@@ -366,7 +478,7 @@ function GearLister:OnItemInfoReceived(eventName, itemID, success)
     if success and pendingItemLoads[itemID] then
         -- Remove from pending loads
         pendingItemLoads[itemID] = nil
-        
+
         -- Refresh visual display if it's open and we're in visual mode
         if mainFrame and mainFrame.frame and mainFrame.frame:IsShown() and visualMode then
             self:RefreshGearDisplay()
@@ -706,15 +818,30 @@ function GearLister:RefreshGearDisplay()
 
                 if gearPanelFrame then
                     -- Pass comparison data to highlight differences
-                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(gearPanelFrame, entryA.items, 50, -35,
-                        entryB.items)
-                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(gearPanelFrame, entryB.items, 300, -35,
-                        entryA.items)
+                    local listA = entryA.items
+                    local listB = entryB.items
+                    -- If structured present, synthesize list strings with links to preserve visuals
+                    if entryA.slotItems and not listA then
+                        listA = {}
+                        for _, slotInfo in ipairs(DISPLAY_ORDER) do
+                            local s = entryA.slotItems[slotInfo.name]
+                            table.insert(listA, (slotInfo.name .. ": " .. (s and s.itemLink or "(empty)")))
+                        end
+                    end
+                    if entryB.slotItems and not listB then
+                        listB = {}
+                        for _, slotInfo in ipairs(DISPLAY_ORDER) do
+                            local s = entryB.slotItems[slotInfo.name]
+                            table.insert(listB, (slotInfo.name .. ": " .. (s and s.itemLink or "(empty)")))
+                        end
+                    end
+                    mainFrame.visualDisplayA = self:CreateVisualGearDisplay(gearPanelFrame, listA, 50, -35, listB)
+                    mainFrame.visualDisplayB = self:CreateVisualGearDisplay(gearPanelFrame, listB, 300, -35, listA)
 
                     -- Add character labels with level/race/class if available
                     local labelA = mainFrame.visualDisplayA:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
                     labelA:SetPoint("TOP", mainFrame.visualDisplayA, "TOP", 0, 0)
-                    local labelTextA = entryA.characterName
+                    local labelTextA = entryA.characterName or (entryA.fullName and tostring(entryA.fullName):gsub("%-.*$","")) or ""
                     if entryA.level and entryA.race and entryA.class then
                         labelTextA = labelTextA ..
                             " (" .. entryA.level .. ", " .. entryA.race .. " " .. entryA.class .. ")"
@@ -725,7 +852,7 @@ function GearLister:RefreshGearDisplay()
 
                     local labelB = mainFrame.visualDisplayB:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
                     labelB:SetPoint("TOP", mainFrame.visualDisplayB, "TOP", 0, 0)
-                    local labelTextB = entryB.characterName
+                    local labelTextB = entryB.characterName or (entryB.fullName and tostring(entryB.fullName):gsub("%-.*$","")) or ""
                     if entryB.level and entryB.race and entryB.class then
                         labelTextB = labelTextB ..
                             " (" .. entryB.level .. ", " .. entryB.race .. " " .. entryB.class .. ")"
@@ -734,9 +861,9 @@ function GearLister:RefreshGearDisplay()
                     end
                     labelB:SetText("|cff0099ff" .. labelTextB .. "|r")
 
-                    -- Add legend at the bottom
-                    local legend = containerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-                    legend:SetPoint("BOTTOM", containerFrame, "BOTTOM", 0, 65) -- Positioned above buttons with more clearance
+                    -- Add legend at the bottom (attach to gear panel frame)
+                    local legend = gearPanelFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                    legend:SetPoint("BOTTOM", gearPanelFrame, "BOTTOM", 0, 65) -- Positioned above buttons with more clearance
                     legend:SetText("|cff808080Grey: Same Items|r")
 
                     titleSuffix = " - Visual Comparison: " .. entryA.characterName .. " vs " .. entryB.characterName
@@ -760,7 +887,7 @@ function GearLister:RefreshGearDisplay()
                 if gearHistory[currentHistoryIndex] then
                     local entry = gearHistory[currentHistoryIndex]
                     items = entry.items
-                    characterName = entry.characterName
+                    characterName = entry.characterName or (entry.fullName and tostring(entry.fullName):gsub("%-.*$", "")) or ""
                     level = entry.level
                     race = entry.race
                     class = entry.class
@@ -769,7 +896,7 @@ function GearLister:RefreshGearDisplay()
             else
                 -- Current gear
                 local targetUnit = "player"
-                characterName = UnitName("player")
+                characterName = self:GetNameRealmForUnit("player") or UnitName("player")
 
                 if inspectMode then
                     local currentTarget = self:GetCurrentTargetName()
@@ -794,11 +921,12 @@ function GearLister:RefreshGearDisplay()
                 race = targetRace
                 class = targetClass
 
-                items = self:GetEquippedItems(targetUnit)
+                local itemsText, slotItems = self:CollectEquippedItems(targetUnit)
+                items = itemsText
 
-                -- Auto-save current gear to history (but not in comparison mode)
-                if characterName and not comparisonMode then
-                    self:SaveToHistory(characterName, items, level, race, class)
+                -- Auto-save current gear when not actively comparing two entries
+                if characterName and not (comparisonMode and comparisonIndexA and comparisonIndexB) then
+                    self:SaveToHistory(characterName, items, level, race, class, slotItems)
                 end
             end
 
@@ -862,24 +990,48 @@ function GearLister:RefreshGearDisplay()
                 end
             end
             titleSuffix = " - Comparison Mode"
+        elseif inspectMode then
+            -- If we’re inspecting a target while comparison mode is on but not fully selected,
+            -- show current target’s gear to avoid confusion
+            local itemsText, slotItems = self:CollectEquippedItems("target")
+            if #itemsText > 0 then
+                gearText = table.concat(itemsText, "\n")
+            end
         elseif currentHistoryIndex then
             -- Show history entry
             local gearHistory = self:GetCurrentCharacterHistory()
             if gearHistory[currentHistoryIndex] then
                 local entry = gearHistory[currentHistoryIndex]
-                gearText = table.concat(entry.items, "\n")
+                if entry.items then
+                    gearText = table.concat(entry.items, "\n")
+                elseif entry.slotItems then
+                    local lines = {}
+                    local delimiter = self:GetActualDelimiter()
+                    for _, slotInfo in ipairs(DISPLAY_ORDER) do
+                        local s = entry.slotItems[slotInfo.name]
+                        if s and s.itemLink and s.itemId then
+                            table.insert(lines, slotInfo.name .. ": " .. s.itemLink .. delimiter ..
+                                ("https://classic.wowhead.com/item=" .. s.itemId))
+                        elseif s and s.itemLink then
+                            table.insert(lines, slotInfo.name .. ": " .. s.itemLink)
+                        else
+                            table.insert(lines, slotInfo.name .. ": (empty)")
+                        end
+                    end
+                    gearText = table.concat(lines, "\n")
+                end
                 titleSuffix = " - " .. entry.characterName .. " (" .. entry.displayTime .. ")"
             end
         else
             -- Show current gear
             local targetUnit = "player"
-            local characterName = UnitName("player")
+            local characterName = (self:GetNameRealmForUnit("player") or UnitName("player") or ""):gsub("%-.*$", "")
 
             if inspectMode then
                 local currentTarget = self:GetCurrentTargetName()
                 if currentTarget then
                     targetUnit = "target"
-                    characterName = currentTarget
+                    characterName = (currentTarget or ""):gsub("%-.*$", "")
                     titleSuffix = " - " .. characterName
                 else
                     self:Print("|cffff0000Target lost, showing your gear instead.|r")
@@ -889,13 +1041,13 @@ function GearLister:RefreshGearDisplay()
                 end
             end
 
-            local items = self:GetEquippedItems(targetUnit)
-            gearText = table.concat(items, "\n")
+            local itemsText, slotItems = self:CollectEquippedItems(targetUnit)
+            gearText = table.concat(itemsText, "\n")
 
             -- Auto-save current gear to history (always save when not in comparison mode)
             if characterName then
                 local name, level, race, class = self:GetTargetInfo(targetUnit)
-                self:SaveToHistory(characterName, items, level, race, class)
+                self:SaveToHistory(characterName, itemsText, level, race, class, slotItems)
             end
         end
 
@@ -1010,10 +1162,18 @@ function GearLister:CreateVisualGearDisplay(parent, items, offsetX, offsetY, com
                 local itemLinkB = string.match(comparisonData, "(|c%x+|Hitem:[^|]+|h[^|]+|h|r)")
 
                 if itemLinkA and itemLinkB then
-                    local nameA = string.match(itemLinkA, "|h([^|]+)|h")
-                    local nameB = string.match(itemLinkB, "|h([^|]+)|h")
-                    isMatching = (nameA == nameB)
-                    isDifferent = not isMatching
+                    local idA = self:GetItemIdFromLink(itemLinkA)
+                    local idB = self:GetItemIdFromLink(itemLinkB)
+                    if idA and idB then
+                        isMatching = (tonumber(idA) == tonumber(idB))
+                        isDifferent = not isMatching
+                    else
+                        -- Fallback to name compare only if IDs unavailable
+                        local nameA = string.match(itemLinkA, "|h([^|]+)|h")
+                        local nameB = string.match(itemLinkB, "|h([^|]+)|h")
+                        isMatching = (nameA == nameB)
+                        isDifferent = not isMatching
+                    end
                 end
             elseif itemData and not comparisonData then
                 -- This character has item, other doesn't
@@ -1202,7 +1362,13 @@ function GearLister:CompareGearSets(entryA, entryB)
             -- Try to extract from item link first, then fall back to plain text
             local linkA = string.match(itemA, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
             if linkA then
-                nameA = string.match(linkA, "|h([^|]+)|h")
+                -- Prefer itemID comparison to avoid false mismatches
+                local idA = self:GetItemIdFromLink(linkA)
+                if idA then
+                    nameA = idA -- temporarily store ID in nameA; used only for equality check below
+                else
+                    nameA = string.match(linkA, "|h([^|]+)|h")
+                end
             else
                 nameA = string.match(itemA,
                     slotName ..
@@ -1211,7 +1377,12 @@ function GearLister:CompareGearSets(entryA, entryB)
 
             local linkB = string.match(itemB, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
             if linkB then
-                nameB = string.match(linkB, "|h([^|]+)|h")
+                local idB = self:GetItemIdFromLink(linkB)
+                if idB then
+                    nameB = idB
+                else
+                    nameB = string.match(linkB, "|h([^|]+)|h")
+                end
             else
                 nameB = string.match(itemB,
                     slotName ..
@@ -1219,27 +1390,29 @@ function GearLister:CompareGearSets(entryA, entryB)
             end
 
             if nameA and nameB then
-                if nameA == nameB then
+                if tostring(nameA) == tostring(nameB) then
                     -- Same item - skip entirely as requested
                     -- (no output for identical items)
                 else
                     -- Different items - show with Wowhead links
                     local delimiter = self:GetActualDelimiter()
                     comparisonText = comparisonText .. "|cffffff00" .. slotName .. ":|r\n"
-                    
+
                     -- Extract item ID and create Wowhead link for item A
                     local itemIdA = linkA and self:GetItemIdFromLink(linkA) or nil
                     local wowheadA = itemIdA and ("https://classic.wowhead.com/item=" .. itemIdA) or ""
-                    comparisonText = comparisonText .. "  |cff00ff00A: " .. nameA
+                    local displayNameA = (linkA and string.match(linkA, "|h([^|]+)|h")) or tostring(nameA)
+                    comparisonText = comparisonText .. "  |cff00ff00A: " .. displayNameA
                     if wowheadA ~= "" then
                         comparisonText = comparisonText .. delimiter .. wowheadA
                     end
                     comparisonText = comparisonText .. "|r\n"
-                    
+
                     -- Extract item ID and create Wowhead link for item B
                     local itemIdB = linkB and self:GetItemIdFromLink(linkB) or nil
                     local wowheadB = itemIdB and ("https://classic.wowhead.com/item=" .. itemIdB) or ""
-                    comparisonText = comparisonText .. "  |cff0099ffB: " .. nameB
+                    local displayNameB = (linkB and string.match(linkB, "|h([^|]+)|h")) or tostring(nameB)
+                    comparisonText = comparisonText .. "  |cff0099ffB: " .. displayNameB
                     if wowheadB ~= "" then
                         comparisonText = comparisonText .. delimiter .. wowheadB
                     end
@@ -1251,7 +1424,12 @@ function GearLister:CompareGearSets(entryA, entryB)
             local nameA
             local linkA = string.match(itemA, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
             if linkA then
-                nameA = string.match(linkA, "|h([^|]+)|h")
+                local idA = self:GetItemIdFromLink(linkA)
+                if idA then
+                    nameA = idA
+                else
+                    nameA = string.match(linkA, "|h([^|]+)|h")
+                end
             else
                 nameA = string.match(itemA,
                     slotName ..
@@ -1262,7 +1440,8 @@ function GearLister:CompareGearSets(entryA, entryB)
                 local delimiter = self:GetActualDelimiter()
                 local itemIdA = linkA and self:GetItemIdFromLink(linkA) or nil
                 local wowheadA = itemIdA and ("https://classic.wowhead.com/item=" .. itemIdA) or ""
-                comparisonText = comparisonText .. "|cffff0000" .. slotName .. ": " .. nameA
+                local displayNameA = (linkA and string.match(linkA, "|h([^|]+)|h")) or tostring(nameA)
+                comparisonText = comparisonText .. "|cffff0000" .. slotName .. ": " .. displayNameA
                 if wowheadA ~= "" then
                     comparisonText = comparisonText .. delimiter .. wowheadA
                 end
@@ -1273,7 +1452,12 @@ function GearLister:CompareGearSets(entryA, entryB)
             local nameB
             local linkB = string.match(itemB, "(|c%x+|Hitem:[^|]+|h([^|]+)|h|r)")
             if linkB then
-                nameB = string.match(linkB, "|h([^|]+)|h")
+                local idB = self:GetItemIdFromLink(linkB)
+                if idB then
+                    nameB = idB
+                else
+                    nameB = string.match(linkB, "|h([^|]+)|h")
+                end
             else
                 nameB = string.match(itemB,
                     slotName ..
@@ -1284,7 +1468,8 @@ function GearLister:CompareGearSets(entryA, entryB)
                 local delimiter = self:GetActualDelimiter()
                 local itemIdB = linkB and self:GetItemIdFromLink(linkB) or nil
                 local wowheadB = itemIdB and ("https://classic.wowhead.com/item=" .. itemIdB) or ""
-                comparisonText = comparisonText .. "|cffff9900" .. slotName .. ": " .. nameB
+                local displayNameB = (linkB and string.match(linkB, "|h([^|]+)|h")) or tostring(nameB)
+                comparisonText = comparisonText .. "|cffff9900" .. slotName .. ": " .. displayNameB
                 if wowheadB ~= "" then
                     comparisonText = comparisonText .. delimiter .. wowheadB
                 end
@@ -1331,9 +1516,9 @@ function GearLister:RefreshCurrentGear()
             if not inspectMode then
                 -- No inspect mode, get current gear immediately and save
                 local characterName = UnitName("player")
-                local items = self:GetEquippedItems("player")
+                local itemsText, slotItems = self:CollectEquippedItems("player")
                 local name, level, race, class = self:GetTargetInfo("player")
-                self:SaveToHistory(characterName, items, level, race, class)
+                self:SaveToHistory(characterName, itemsText, level, race, class, slotItems)
                 -- Force complete UI refresh
                 self:RefreshMainWindow()
                 self:Print("|cff00ff00Inspected and saved gear for " .. characterName .. "|r")
@@ -1346,12 +1531,13 @@ function GearLister:RefreshCurrentGear()
 end
 
 function GearLister:ClearHistory()
-    local currentChar = UnitName("player")
+    local currentChar = self:GetNameRealmForUnit("player") or UnitName("player")
     if currentChar and self.db.profile.characterHistory[currentChar] then
         self.db.profile.characterHistory[currentChar] = {}
         currentHistoryIndex = nil
         self:RefreshMainWindow()
-        self:Print("|cff00ff00History cleared for " .. currentChar .. ".|r")
+        local displayName = tostring(currentChar):gsub("%-.*$", "")
+        self:Print("|cff00ff00History cleared for " .. displayName .. ".|r")
     else
         self:Print("|cffff0000Unable to clear history - character not found.|r")
     end
@@ -1564,7 +1750,7 @@ function GearLister:SlashProcessor(input)
         self:Print("|cffff0000GearLister is not fully loaded yet. Please try again in a moment.|r")
         return
     end
-    local command = string.lower(string.trim(input or ""))
+    local command = string.lower(strtrim(input or ""))
 
     if command == "inspect" then
         if self:StartInspect() then
